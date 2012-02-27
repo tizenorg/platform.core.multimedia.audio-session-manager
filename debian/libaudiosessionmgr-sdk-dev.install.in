@@ -1,0 +1,5 @@
+# if your module creates shared libraries
+@PREFIX@/lib/*.la
+@PREFIX@/lib/*.a
+@PREFIX@/lib/pkgconfig/*
+

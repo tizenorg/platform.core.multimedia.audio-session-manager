@@ -1,0 +1,7 @@
+audio-session-manager (0.1.19-0) unstable; urgency=low
+
+  * Initial release
+  * Git: pkgs/a/audio-session-manager
+  * Tag: audio-session-manager_0.1.19-0
+
+ -- Seungbae Shin <seungbae.shin@samsung.com>  Tue, 03 Jan 2012 19:14:10 +0900

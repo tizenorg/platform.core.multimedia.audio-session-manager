@@ -1,0 +1,11 @@
+#!/bin/sh
+
+if [ -n "`env|grep SBOX`" ]; then
+    echo "postinst: sbox installation skip lauching daemon"
+else
+	PID=`/bin/pidof audio-session-mgr-server`
+	if [ -n "$PID" ]; then
+		echo "preinst: kill current audio-session-mgr-server"
+		/usr/bin/killall -9 audio-session-mgr-server
+	fi
+fi
