@@ -1,6 +1,6 @@
 Name:       audio-session-manager
 Summary:    Audioxi Session Manager
-Version:    0.1.14
+Version:	0.1.19
 Release:    1
 Group:      TO_BE/FILLED_IN
 License:    TO BE FILLED IN
@@ -62,27 +62,25 @@ rm -rf %{buildroot}
 /sbin/ldconfig
 
 vconftool set -t int memory/Sound/SoundStatus "0" -i
+mkdir -p /etc/rc.d/rc3.d/
+ln -s ../init.d/audiosessionmanager /etc/rc.d/rc3.d/S30audiosessionmanager
+mkdir -p /etc/rc.d/rc4.d/
+ln -s ../init.d/audiosessionmanager /etc/rc.d/rc4.d/S30audiosessionmanager
 
 %postun -p /sbin/ldconfig
 
 
 
-
-
 %files
-%defattr(-,root,root,-)
 %{_sysconfdir}/rc.d/init.d/audiosessionmanager
 %{_bindir}/audio-session-mgr-server
 %{_libdir}/libaudio-session-mgr.so.*
 
 %files devel
-%defattr(-,root,root,-)
 %{_includedir}/mmf/audio-session-manager-types.h
 %{_includedir}/mmf/audio-session-manager.h
 
-
 %files sdk-devel
-%defattr(-,root,root,-)
 %{_includedir}/mmf/audio-session-manager-types.h
 %{_includedir}/mmf/audio-session-manager.h
 %{_libdir}/libaudio-session-mgr.so
