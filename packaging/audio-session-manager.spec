@@ -5,6 +5,7 @@ Release:    1
 Group:      TO_BE/FILLED_IN
 License:    Apache-2.0
 Source0:    %{name}-%{version}.tar.gz
+Source1001: packaging/audio-session-manager.manifest 
 Requires(post): /sbin/ldconfig
 Requires(post): /usr/bin/vconftool
 Requires(postun): /sbin/ldconfig
@@ -44,6 +45,7 @@ auido-session-manager development package for sdk release for audio-session
 
 
 %build
+cp %{SOURCE1001} .
 
 %autogen --disable-static --noconfigure
 LDFLAGS="$LDFLAGS -Wl,--rpath=%{prefix}/lib -Wl,--hash-style=both -Wl,--as-needed "; export LDFLAGS
@@ -75,15 +77,18 @@ rm -f /etc/rc.d/rc4.d/S30audiosessionmanager
 
 
 %files
+%manifest audio-session-manager.manifest
 %{_sysconfdir}/rc.d/init.d/audiosessionmanager
 %{_bindir}/audio-session-mgr-server
 %{_libdir}/libaudio-session-mgr.so.*
 
 %files devel
+%manifest audio-session-manager.manifest
 %{_includedir}/mmf/audio-session-manager-types.h
 %{_includedir}/mmf/audio-session-manager.h
 
 %files sdk-devel
+%manifest audio-session-manager.manifest
 %{_includedir}/mmf/audio-session-manager-types.h
 %{_includedir}/mmf/audio-session-manager.h
 %{_libdir}/libaudio-session-mgr.so
