@@ -1,0 +1,15 @@
+[Unit]
+Description=Start the audio manager
+
+[Service]
+ExecStart=/usr/bin/audio-session-mgr-server
+Restart=restart-always
+RestartSec=3
+
+OOMScoreAdjust=-100
+IOSchedulingClass=realtime
+IOSchedulingPriority=1
+CPUSchedulingPriority=90
+
+[Install]
+WantedBy=multi-user.target

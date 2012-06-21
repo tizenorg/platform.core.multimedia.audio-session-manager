@@ -2,13 +2,19 @@ Name:       audio-session-manager
 Summary:    Audioxi Session Manager
 Version:	0.1.19
 Release:    1
-Group:      TO_BE/FILLED_IN
+Group:      System/Main
 License:    Apache-2.0
 Source0:    %{name}-%{version}.tar.gz
+Source101:  audio-session-manager.service
 Source1001: packaging/audio-session-manager.manifest 
+
 Requires(post): /sbin/ldconfig
+Requires(post): /usr/bin/systemctl
 Requires(post): /usr/bin/vconftool
 Requires(postun): /sbin/ldconfig
+Requires(postun): /usr/bin/systemctl
+Requires(preun): /usr/bin/systemctl
+
 BuildRequires:  pkgconfig(glib-2.0)
 BuildRequires:  pkgconfig(mm-log)
 BuildRequires:  pkgconfig(sysman)
@@ -62,14 +68,26 @@ mkdir -p %{buildroot}/etc/rc.d/rc4.d
 ln -s ../etc/rc.d/init.d/audiosessionmanager %{buildroot}/%{_sysconfdir}/rc.d/rc3.d/S30audiosessionmanager
 ln -s ../etc/rc.d/init.d/audiosessionmanager %{buildroot}/%{_sysconfdir}/rc.d/rc4.d/S30audiosessionmanager
 
+mkdir -p %{buildroot}%{_libdir}/systemd/system/multi-user.target.wants
+install -m 0644 %SOURCE101 %{buildroot}%{_libdir}/systemd/system/
+ln -s ../audio-session-manager.service %{buildroot}%{_libdir}/systemd/system/multi-user.target.wants/audio-session-manager.service
+
+
+%preun
+if [ $1 == 0 ]; then
+    systemctl stop audio-session-manager.service
+fi
 
 %post 
 /sbin/ldconfig
-
+if [ $1 == 1 ]; then
+    systemctl restart audio-session-manager.service
+fi
 vconftool set -t int memory/Sound/SoundStatus "0" -i
 
 %postun 
 /sbin/ldconfig
+systemctl daemon-reload
 
 
 %files
@@ -79,6 +97,8 @@ vconftool set -t int memory/Sound/SoundStatus "0" -i
 %{_sysconfdir}/rc.d/rc4.d/S30audiosessionmanager
 %{_bindir}/audio-session-mgr-server
 %{_libdir}/libaudio-session-mgr.so.*
+%{_libdir}/systemd/system/audio-session-manager.service
+%{_libdir}/systemd/system/multi-user.target.wants/audio-session-manager.service
 
 %files devel
 %manifest audio-session-manager.manifest
