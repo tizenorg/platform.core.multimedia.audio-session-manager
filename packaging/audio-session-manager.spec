@@ -57,6 +57,10 @@ make %{?jobs:-j%jobs}
 rm -rf %{buildroot}
 %make_install
 
+mkdir -p %{buildroot}/etc/rc.d/rc3.d
+mkdir -p %{buildroot}/etc/rc.d/rc4.d
+ln -s ../etc/rc.d/init.d/audiosessionmanager %{buildroot}/%{_sysconfdir}/rc.d/rc3.d/S30audiosessionmanager
+ln -s ../etc/rc.d/init.d/audiosessionmanager %{buildroot}/%{_sysconfdir}/rc.d/rc4.d/S30audiosessionmanager
 
 
 %post 
@@ -64,21 +68,15 @@ rm -rf %{buildroot}
 
 vconftool set -t int memory/Sound/SoundStatus "0" -i
 
-mkdir -p /etc/rc.d/rc3.d
-mkdir -p /etc/rc.d/rc4.d
-ln -s /etc/rc.d/init.d/audiosessionmanager /etc/rc.d/rc3.d/S30audiosessionmanager
-ln -s /etc/rc.d/init.d/audiosessionmanager /etc/rc.d/rc4.d/S30audiosessionmanager
-
 %postun 
 /sbin/ldconfig
-
-rm -f /etc/rc.d/rc3.d/S30audiosessionmanager
-rm -f /etc/rc.d/rc4.d/S30audiosessionmanager
 
 
 %files
 %manifest audio-session-manager.manifest
 %{_sysconfdir}/rc.d/init.d/audiosessionmanager
+%{_sysconfdir}/rc.d/rc3.d/S30audiosessionmanager
+%{_sysconfdir}/rc.d/rc4.d/S30audiosessionmanager
 %{_bindir}/audio-session-mgr-server
 %{_libdir}/libaudio-session-mgr.so.*
 
