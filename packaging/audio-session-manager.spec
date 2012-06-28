@@ -65,8 +65,8 @@ rm -rf %{buildroot}
 
 mkdir -p %{buildroot}/etc/rc.d/rc3.d
 mkdir -p %{buildroot}/etc/rc.d/rc4.d
-ln -s ../etc/rc.d/init.d/audiosessionmanager %{buildroot}/%{_sysconfdir}/rc.d/rc3.d/S30audiosessionmanager
-ln -s ../etc/rc.d/init.d/audiosessionmanager %{buildroot}/%{_sysconfdir}/rc.d/rc4.d/S30audiosessionmanager
+ln -s ../init.d/audiosessionmanager %{buildroot}/%{_sysconfdir}/rc.d/rc3.d/S30audiosessionmanager
+ln -s ../init.d/audiosessionmanager %{buildroot}/%{_sysconfdir}/rc.d/rc4.d/S30audiosessionmanager
 
 mkdir -p %{buildroot}%{_libdir}/systemd/system/multi-user.target.wants
 install -m 0644 %SOURCE101 %{buildroot}%{_libdir}/systemd/system/
