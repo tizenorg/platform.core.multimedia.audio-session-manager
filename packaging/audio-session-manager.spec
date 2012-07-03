@@ -1,6 +1,6 @@
 Name:       audio-session-manager
 Summary:    Audioxi Session Manager
-Version:	0.1.19
+Version:    0.1.19
 Release:    1
 Group:      System/Main
 License:    Apache-2.0

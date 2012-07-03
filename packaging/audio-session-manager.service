@@ -7,9 +7,6 @@ Restart=restart-always
 RestartSec=3
 
 OOMScoreAdjust=-100
-IOSchedulingClass=realtime
-IOSchedulingPriority=1
-CPUSchedulingPriority=90
 
 [Install]
 WantedBy=multi-user.target
