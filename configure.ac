@@ -65,6 +65,5 @@ AC_CHECK_FUNCS([memset])
 
 AC_CONFIG_FILES([Makefile
 		 audio-session-mgr.pc
-		 init/Makefile
 		 ])
 AC_OUTPUT

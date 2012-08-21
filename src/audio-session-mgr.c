@@ -82,14 +82,16 @@ typedef gboolean (*gLoopPollHandler_t)(gpointer d);
 typedef struct
 {
 	ASM_sound_events_t	sound_event;
-	int						asm_fd;
+	GSourceFuncs*		g_src_funcs;
+	GPollFD*		g_poll_fd;
+	int			asm_fd;
 	ASM_sound_cb_t 		asm_callback;
-	void				*cb_data;
-	int					asm_tid;
-	int						handle;
-	bool					is_used;
-	GSource* 				asm_src;
-	guint 					ASM_g_id;
+	void			*cb_data;
+	int			asm_tid;
+	int			handle;
+	bool			is_used;
+	GSource*		asm_src;
+	guint			ASM_g_id;
 } ASM_sound_ino_t;
 
 ASM_sound_ino_t ASM_sound_handle[ASM_HANDLE_MAX];
@@ -113,7 +115,8 @@ static const char* ASM_sound_events_str[] =
 	"EARJACK_UNPLUG",
 	"ALARM",
 	"VIDEOCALL",
-	"MONITOR"
+	"MONITOR",
+	"RICH_CALL"
 };
 
 static const char* ASM_sound_cases_str[] =
@@ -261,22 +264,28 @@ gboolean asm_callback_handler( gpointer d)
 				break;
 			}
 #ifdef CONFIG_ENABLE_RETCB
-			int rett = 0;
-			int buf = cb_res;
-			int tmpfd = -1;
-			char *filename2 = g_strdup_printf("/tmp/ASM.%d.%dr", ASM_sound_handle[asm_index].asm_tid, handle);
-			tmpfd = open(filename2, O_WRONLY | O_NONBLOCK);
-			if (tmpfd < 0) {
-				char str_error[256];
-				strerror_r(errno, str_error, sizeof(str_error));
-				asm_error("[ASM_CB][RETCB][Failed(May Server Close First)]tid(%d) fd(%d) %s errno=%d(%s)\n", tid, tmpfd, filename2, errno, str_error);
+
+			/* If command is other than RESUME, send return */
+			if (rcv_command != ASM_COMMAND_RESUME) {
+				int rett = 0;
+				int buf = cb_res;
+				int tmpfd = -1;
+				char *filename2 = g_strdup_printf("/tmp/ASM.%d.%dr", ASM_sound_handle[asm_index].asm_tid, handle);
+				tmpfd = open(filename2, O_WRONLY | O_NONBLOCK);
+				if (tmpfd < 0) {
+					char str_error[256];
+					strerror_r(errno, str_error, sizeof(str_error));
+					asm_error("[ASM_CB][RETCB][Failed(May Server Close First)]tid(%d) fd(%d) %s errno=%d(%s)\n", tid, tmpfd, filename2, errno, str_error);
+					g_free(filename2);
+					return FALSE;
+				}
+				rett = write(tmpfd, &buf, sizeof(buf));
+				close(tmpfd);
 				g_free(filename2);
-				return FALSE;
+				asm_info("[RETCB]tid(%d) finishing CB (write=%d)\n", tid, rett);
+			} else {
+				asm_info("[RETCB] No need to send return for RESUME command\n");
 			}
-			rett = write(tmpfd, &buf, sizeof(buf));
-			close(tmpfd);
-			g_free(filename2);
-			asm_info("[RETCB]tid(%d) finishing CB (write=%d)\n", tid, rett);
 #endif
 		}
 	}
@@ -285,36 +294,40 @@ gboolean asm_callback_handler( gpointer d)
 
 bool __ASM_add_sound_callback(int index, int fd, gushort events, gLoopPollHandler_t p_gloop_poll_handler )
 {
-	GSource* cmd_fd_gsrc = NULL;
-	GSourceFuncs *src_funcs = NULL;		/* handler function */
+	GSource* g_src = NULL;
+	GSourceFuncs *g_src_funcs = NULL;		/* handler function */
 	guint gsource_handle;
-	GPollFD *g_fd_cmd = NULL;			/* file descriptor */
+	GPollFD *g_poll_fd = NULL;			/* file descriptor */
 
 	/* 1. make GSource Object */
-	src_funcs = (GSourceFuncs *)g_malloc(sizeof(GSourceFuncs));
-	if (!src_funcs) {
+	g_src_funcs = (GSourceFuncs *)g_malloc(sizeof(GSourceFuncs));
+	if (!g_src_funcs) {
 		asm_info(" __ASM_add_sound_callback : g_malloc failed on g_src_funcs");
 		return false;
 	}
-	src_funcs->prepare = __asm_fd_prepare;
-	src_funcs->check = __asm_fd_check;
-	src_funcs->dispatch = __asm_fd_dispatch;
-	src_funcs->finalize = NULL;
-	cmd_fd_gsrc = g_source_new(src_funcs, sizeof(GSource));
- 	if (!cmd_fd_gsrc) {
+	g_src_funcs->prepare = __asm_fd_prepare;
+	g_src_funcs->check = __asm_fd_check;
+	g_src_funcs->dispatch = __asm_fd_dispatch;
+	g_src_funcs->finalize = NULL;
+	g_src = g_source_new(g_src_funcs, sizeof(GSource));
+	if (!g_src) {
  		asm_critical(" __ASM_add_sound_callback : g_malloc failed on m_readfd");
  		return false;
  	}
- 	ASM_sound_handle[index].asm_src = cmd_fd_gsrc;
+	ASM_sound_handle[index].asm_src = g_src;
+	ASM_sound_handle[index].g_src_funcs = g_src_funcs;
+	asm_info(" g_malloc : g_src_funcs(%#X)\n", g_src_funcs);
 
 	/* 2. add file description which used in g_loop() */
-	g_fd_cmd = (GPollFD *)g_malloc(sizeof(GPollFD));
- 	g_fd_cmd->fd = fd;
- 	g_fd_cmd->events = events;
+	g_poll_fd = (GPollFD *)g_malloc(sizeof(GPollFD));
+	g_poll_fd->fd = fd;
+	g_poll_fd->events = events;
+	ASM_sound_handle[index].g_poll_fd = g_poll_fd;
+	asm_info(" g_malloc : g_poll_fd(%#X)\n", g_poll_fd);
 
 	/* 3. combine g_source object and file descriptor */
-	g_source_add_poll(cmd_fd_gsrc, g_fd_cmd);
-	gsource_handle = g_source_attach(cmd_fd_gsrc, NULL);
+	g_source_add_poll(g_src, g_poll_fd);
+	gsource_handle = g_source_attach(g_src, NULL);
  	if (!gsource_handle) {
  		asm_critical(" __ASM_add_sound_callback : Error: Failed to attach the source to context");
  		return false;
@@ -324,7 +337,7 @@ bool __ASM_add_sound_callback(int index, int fd, gushort events, gLoopPollHandle
  	ASM_sound_handle[index].ASM_g_id = gsource_handle;
 
 	/* 4. set callback */
-	g_source_set_callback(cmd_fd_gsrc, p_gloop_poll_handler,(gpointer)g_fd_cmd, NULL);
+	g_source_set_callback(g_src, p_gloop_poll_handler,(gpointer)g_poll_fd, NULL);
 
  	asm_info(" g_source_set_callback : %d\n", errno);
  	return true;
@@ -334,18 +347,30 @@ bool __ASM_add_sound_callback(int index, int fd, gushort events, gLoopPollHandle
 bool __ASM_remove_sound_callback(int index, gushort events)
 {
 	bool ret;
-	GPollFD *g_fd_cmd = NULL;	/* store file descriptor */
+	GPollFD *g_poll_fd = NULL;	/* store file descriptor */
+	GSourceFunc *g_src_funcs = NULL;
 
-	g_fd_cmd = (GPollFD *)g_malloc(sizeof(GPollFD));
-	g_fd_cmd->fd = ASM_sound_handle[index].asm_fd;
-	g_fd_cmd->events = events;
+	g_src_funcs = ASM_sound_handle[index].g_src_funcs;
+	g_poll_fd = ASM_sound_handle[index].g_poll_fd;
+	g_poll_fd->fd = ASM_sound_handle[index].asm_fd;
+	g_poll_fd->events = events;
 
-	asm_info(" g_source_remove_poll : fd(%d), event(%#x)\n", g_fd_cmd->fd, g_fd_cmd->events);
-	g_source_remove_poll(ASM_sound_handle[index].asm_src, g_fd_cmd);
+	asm_info(" g_source_remove_poll : fd(%d), event(%#x)\n", g_poll_fd->fd, g_poll_fd->events);
+	g_source_remove_poll(ASM_sound_handle[index].asm_src, g_poll_fd);
 	asm_info(" g_source_remove_poll : %d\n", errno);
 	ret = g_source_remove(ASM_sound_handle[index].ASM_g_id);
 	asm_info(" g_source_remove : ret(%#X)\n", ret);
 
+	if (g_src_funcs) {
+		asm_info(" g_free : g_src_funcs(%#X)\n", g_src_funcs);
+		g_free(g_src_funcs);
+		ASM_sound_handle[index].g_src_funcs = NULL;
+	}
+	if (g_poll_fd) {
+		asm_info(" g_free : g_poll_fd(%#X)\n", g_poll_fd);
+		g_free(g_poll_fd);
+		ASM_sound_handle[index].g_poll_fd = NULL;
+	}
 	ASM_sound_handle[index].ASM_g_id = 0;
 	ASM_sound_handle[index].asm_src = NULL;
 	ASM_sound_handle[index].asm_callback = NULL;
@@ -519,7 +544,8 @@ bool __ASM_set_cookie (unsigned char* cookie)
 #endif
 
 EXPORT_API
-bool ASM_register_sound(const int application_pid, int *asm_handle, ASM_sound_events_t sound_event, ASM_sound_states_t sound_state, ASM_sound_cb_t callback, void *cb_data, ASM_resource_t mm_resource, int *error_code)
+bool ASM_register_sound_ex (const int application_pid, int *asm_handle, ASM_sound_events_t sound_event, ASM_sound_states_t sound_state,
+						ASM_sound_cb_t callback, void *cb_data, ASM_resource_t mm_resource, int *error_code, int (*func)(void*,void*))
 {
 	int error = 0;
 	unsigned int sound_status_value;
@@ -600,17 +626,22 @@ bool ASM_register_sound(const int application_pid, int *asm_handle, ASM_sound_ev
 		asm_error_r("[Error] >>>> ASM_register_sound : Send msg construct failed.\n");
 		return false;
 	}
-	NO_EINTR(ret = msgsnd(asm_snd_msgid, (void *)&asm_snd_msg, sizeof(asm_snd_msg.data), 0));
-	if (ret == -1) {
-		*error_code = ERR_ASM_MSG_QUEUE_SND_ERROR;
-		asm_error_r("[Error] >>>> ASM_register_sound : Msgsnd failed (%d,%s) \n", errno, strerror(errno));
-		return false;
-	}
-	NO_EINTR(ret = msgrcv(asm_rcv_msgid, (void *)&asm_rcv_msg, sizeof(asm_rcv_msg.data), asm_pid, 0));
-	if (ret == -1) {
-		*error_code = ERR_ASM_MSG_QUEUE_RCV_ERROR;
-		asm_error_r("[Error] >>>> ASM_register_sound : Msgrcv failed (%d,%s) \n", errno, strerror(errno));
-		return false;
+
+	if (func) {
+		func ((void*)&asm_snd_msg, (void*)&asm_rcv_msg);
+	} else	{
+		NO_EINTR(ret = msgsnd(asm_snd_msgid, (void *)&asm_snd_msg, sizeof(asm_snd_msg.data), 0));
+		if (ret == -1) {
+			*error_code = ERR_ASM_MSG_QUEUE_SND_ERROR;
+			asm_error_r("[Error] >>>> ASM_register_sound : Msgsnd failed (%d,%s) \n", errno, strerror(errno));
+			return false;
+		}
+		NO_EINTR(ret = msgrcv(asm_rcv_msgid, (void *)&asm_rcv_msg, sizeof(asm_rcv_msg.data), asm_pid, 0));
+		if (ret == -1) {
+			*error_code = ERR_ASM_MSG_QUEUE_RCV_ERROR;
+			asm_error_r("[Error] >>>> ASM_register_sound : Msgrcv failed (%d,%s) \n", errno, strerror(errno));
+			return false;
+		}
 	}
 	/* Construct msg to send -> send msg -> recv msg : end */
 
@@ -696,6 +727,14 @@ bool ASM_register_sound(const int application_pid, int *asm_handle, ASM_sound_ev
 }
 
 EXPORT_API
+bool ASM_register_sound (const int application_pid, int *asm_handle, ASM_sound_events_t sound_event, ASM_sound_states_t sound_state,
+						ASM_sound_cb_t callback, void *cb_data, ASM_resource_t mm_resource, int *error_code)
+{
+	return ASM_register_sound_ex (application_pid, asm_handle, sound_event, sound_state, callback, cb_data, mm_resource, error_code, NULL);
+}
+
+
+EXPORT_API
 bool ASM_change_callback(const int asm_handle, ASM_sound_events_t sound_event, ASM_sound_cb_t callback, void *cb_data, int *error_code)
 {
 	int handle=0;
@@ -735,9 +774,8 @@ bool ASM_change_callback(const int asm_handle, ASM_sound_events_t sound_event, A
 	return true;
 }
 
-
 EXPORT_API
-bool ASM_unregister_sound(const int asm_handle, ASM_sound_events_t sound_event, int *error_code)
+bool ASM_unregister_sound_ex(const int asm_handle, ASM_sound_events_t sound_event, int *error_code, int (*func)(void*,void*))
 {
 	int handle=0;
 	int asm_index = -1;
@@ -775,11 +813,15 @@ bool ASM_unregister_sound(const int asm_handle, ASM_sound_events_t sound_event, 
 		return false;
 	}
 
-	NO_EINTR(ret = msgsnd(asm_snd_msgid, (void *)&asm_snd_msg, sizeof(asm_snd_msg.data), 0));
-	if (ret == -1) {
-		*error_code = ERR_ASM_MSG_QUEUE_SND_ERROR;
-		asm_error_r("[Error] >>>> ASM_unregister_sound : Msgsnd failed (%d,%s) \n", errno, strerror(errno));
-		return false;
+	if (func) {
+		func(&asm_snd_msg, &asm_rcv_msg);
+	} else  {
+		NO_EINTR(ret = msgsnd(asm_snd_msgid, (void *)&asm_snd_msg, sizeof(asm_snd_msg.data), 0));
+		if (ret == -1) {
+			*error_code = ERR_ASM_MSG_QUEUE_SND_ERROR;
+			asm_error_r("[Error] >>>> ASM_unregister_sound : Msgsnd failed (%d,%s) \n", errno, strerror(errno));
+			return false;
+		}
 	}
 
 	__ASM_destroy_callback(asm_index);
@@ -792,6 +834,12 @@ bool ASM_unregister_sound(const int asm_handle, ASM_sound_events_t sound_event, 
 	asm_info(">>>> ASM_unregister_sound : Event(%s) \n", ASM_sound_events_str[sound_event]);
 
 	return true;
+}
+
+EXPORT_API
+bool ASM_unregister_sound(const int asm_handle, ASM_sound_events_t sound_event, int *error_code)
+{
+	ASM_unregister_sound_ex (asm_handle, sound_event, error_code, NULL);
 }
 
 EXPORT_API
@@ -925,9 +973,8 @@ bool ASM_get_sound_state(const int asm_handle, ASM_sound_events_t sound_event, A
 	return true;
 }
 
-
 EXPORT_API
-bool ASM_set_sound_state(const int asm_handle, ASM_sound_events_t sound_event, ASM_sound_states_t sound_state, ASM_resource_t mm_resource, int *error_code)
+bool ASM_set_sound_state_ex (const int asm_handle, ASM_sound_events_t sound_event, ASM_sound_states_t sound_state, ASM_resource_t mm_resource, int *error_code, int (*func)(void*,void*))
 {
 	int handle = 0;
 	int asm_index = 0;
@@ -969,19 +1016,26 @@ bool ASM_set_sound_state(const int asm_handle, ASM_sound_events_t sound_event, A
 		return false;
 	}
 
-	NO_EINTR(ret = msgsnd(asm_snd_msgid, (void *)&asm_snd_msg, sizeof(asm_snd_msg.data), 0));
-	if (ret == -1) {
-		*error_code = ERR_ASM_MSG_QUEUE_SND_ERROR;
-		asm_error_r("[Error] >>>> ASM_set_sound_state : Msgsnd failed (%d,%s) \n", errno, strerror(errno));
-		return false;
+
+	if (func) {
+		func (&asm_snd_msg, &asm_rcv_msg);
+	} else {
+		NO_EINTR(ret = msgsnd(asm_snd_msgid, (void *)&asm_snd_msg, sizeof(asm_snd_msg.data), 0));
+		if (ret == -1) {
+			*error_code = ERR_ASM_MSG_QUEUE_SND_ERROR;
+			asm_error_r("[Error] >>>> ASM_set_sound_state : Msgsnd failed (%d,%s) \n", errno, strerror(errno));
+			return false;
+		}
 	}
 
 	if (sound_state == ASM_STATE_PLAYING ) {
-		NO_EINTR(ret = msgrcv(asm_rcv_msgid, (void *)&asm_rcv_msg, sizeof(asm_rcv_msg.data), ASM_sound_handle[handle].asm_tid, 0));
-		if (ret == -1) {
-			*error_code = ERR_ASM_MSG_QUEUE_RCV_ERROR;
-			asm_error_r("[Error] >>>> ASM_set_sound_state : Msgrcv failed (%d,%s) \n", errno, strerror(errno));
-			return false;
+		if (func == NULL) {
+			NO_EINTR(ret = msgrcv(asm_rcv_msgid, (void *)&asm_rcv_msg, sizeof(asm_rcv_msg.data), ASM_sound_handle[handle].asm_tid, 0));
+			if (ret == -1) {
+				*error_code = ERR_ASM_MSG_QUEUE_RCV_ERROR;
+				asm_error_r("[Error] >>>> ASM_set_sound_state : Msgrcv failed (%d,%s) \n", errno, strerror(errno));
+				return false;
+			}
 		}
 
 		asm_info( " <<<<<<<<<<<<<<<< [BEFORE] Callback : Main Context >>>>>>>>>>>>>>>>>>>> \n");
@@ -1037,6 +1091,158 @@ bool ASM_set_sound_state(const int asm_handle, ASM_sound_events_t sound_event, A
 
 
 	asm_info(">>>> ASM_set_sound_state : Event(%s), State(%s) \n", ASM_sound_events_str[sound_event],ASM_sound_state_str[sound_state]);
+
+	return true;
+}
+
+EXPORT_API
+bool ASM_set_sound_state (const int asm_handle, ASM_sound_events_t sound_event, ASM_sound_states_t sound_state, ASM_resource_t mm_resource, int *error_code)
+{
+	return ASM_set_sound_state_ex (asm_handle, sound_event, sound_state, mm_resource, error_code, NULL);
+}
+
+EXPORT_API
+bool ASM_set_subsession (const int asm_handle, int subsession, int *error_code, int (*func)(void*,void*))
+{
+	int handle = 0;
+	int asm_index = 0;
+	int ret = 0;
+	unsigned int rcv_sound_status_value;
+
+	asm_info("<<<< ASM_set_subsession \n");
+	if (error_code == NULL) {
+		asm_error_r("error_code is null \n");
+		return false;
+	}
+
+	if (asm_handle < 0 || asm_handle >= ASM_SERVER_HANDLE_MAX) {
+		*error_code = ERR_ASM_POLICY_INVALID_HANDLE;
+		asm_error_r("[Error] ASM_set_sound_state : Invalid handle %d \n", asm_handle);
+		return false;
+	}
+
+	handle = asm_handle;
+
+	asm_index = __ASM_find_index(handle);
+	if (asm_index == -1) {
+		asm_error_r("Can not find index of %d [%d]\n", handle, __LINE__);
+		return false;
+	}
+
+	if (!__asm_construct_snd_msg(ASM_sound_handle[asm_index].asm_tid, ASM_sound_handle[asm_index].handle, subsession, ASM_REQUEST_SET_SUBSESSION, 0, 0, error_code)) {
+		asm_error_r("[Error] >>>> ASM_set_subsession : Send msg construct failed.\n");
+		return false;
+	}
+
+
+	if (func) {
+		func (&asm_snd_msg, &asm_rcv_msg);
+	} else {
+		NO_EINTR(ret = msgsnd(asm_snd_msgid, (void *)&asm_snd_msg, sizeof(asm_snd_msg.data), 0));
+		if (ret == -1) {
+			*error_code = ERR_ASM_MSG_QUEUE_SND_ERROR;
+			asm_error_r("[Error] >>>> ASM_set_subsession : Msgsnd failed (%d,%s) \n", errno, strerror(errno));
+			return false;
+		}
+
+		NO_EINTR(ret = msgrcv(asm_rcv_msgid, (void *)&asm_rcv_msg, sizeof(asm_rcv_msg.data), ASM_sound_handle[handle].asm_tid, 0));
+		if (ret == -1) {
+			*error_code = ERR_ASM_MSG_QUEUE_RCV_ERROR;
+			asm_error_r("[Error] >>>> ASM_set_subsession : Msgrcv failed (%d,%s) \n", errno, strerror(errno));
+			return false;
+		}
+	}
+
+	/* TODO: Should check msg returned.....*/
+#if 0
+	{
+		asm_info( " <<<<<<<<<<<<<<<< [BEFORE] Callback : Main Context >>>>>>>>>>>>>>>>>>>> \n");
+		/********************************************************************************************************/
+		switch (asm_rcv_msg.data.result_sound_command) {
+		case ASM_COMMAND_PAUSE:
+		case ASM_COMMAND_STOP:
+		case ASM_COMMAND_PLAY:
+		case ASM_COMMAND_NONE:
+		case ASM_COMMAND_RESUME:
+		default:
+			break;
+		}
+		/********************************************************************************************************/
+		asm_info(" <<<<<<<<<<<<<<<< [AFTER]  Callback : Main Context >>>>>>>>>>>>>>>>>>>> \n");
+
+	}
+#endif
+
+
+	asm_info(">>>> ASM_set_subsession\n");
+
+	return true;
+}
+
+EXPORT_API
+bool ASM_get_subsession (const int asm_handle, int *subsession_value, int *error_code, int (*func)(void*,void*))
+{
+	int handle = 0;
+	int asm_index = 0;
+	int ret = 0;
+	unsigned int rcv_sound_status_value;
+
+	asm_info("<<<< ASM_get_subsession \n");
+	if (error_code == NULL) {
+		asm_error_r("error_code is null \n");
+		return false;
+	}
+
+	/* TODO : Error Handling */
+#if 0
+	if (sound_event < 0 || sound_event > ASM_PRIORITY_MATRIX_MIN) {
+		asm_error_r(" ASM_set_subsession(%x,%x) arg is out of bound!!\n", sound_event, sound_state);
+		*error_code = ERR_ASM_EVENT_IS_INVALID;
+		return false;
+	}
+#endif
+
+	if (asm_handle < 0 || asm_handle >= ASM_SERVER_HANDLE_MAX) {
+		*error_code = ERR_ASM_POLICY_INVALID_HANDLE;
+		asm_error_r("[Error] ASM_get_subsession : Invalid handle %d \n", asm_handle);
+		return false;
+	}
+
+	handle = asm_handle;
+
+	asm_index = __ASM_find_index(handle);
+	if (asm_index == -1) {
+		asm_error_r("Can not find index of %d [%d]\n", handle, __LINE__);
+		return false;
+	}
+
+	if (!__asm_construct_snd_msg(ASM_sound_handle[asm_index].asm_tid, ASM_sound_handle[asm_index].handle, 0, ASM_REQUEST_GET_SUBSESSION, 0, 0, error_code)) {
+		asm_error_r("[Error] >>>> ASM_get_subsession : Send msg construct failed.\n");
+		return false;
+	}
+
+
+	if (func) {
+		func (&asm_snd_msg, &asm_rcv_msg);
+	} else {
+		NO_EINTR(ret = msgsnd(asm_snd_msgid, (void *)&asm_snd_msg, sizeof(asm_snd_msg.data), 0));
+		if (ret == -1) {
+			*error_code = ERR_ASM_MSG_QUEUE_SND_ERROR;
+			asm_error_r("[Error] >>>> ASM_get_subsession : Msgsnd failed (%d,%s) \n", errno, strerror(errno));
+			return false;
+		}
+
+		NO_EINTR(ret = msgrcv(asm_rcv_msgid, (void *)&asm_rcv_msg, sizeof(asm_rcv_msg.data), ASM_sound_handle[handle].asm_tid, 0));
+		if (ret == -1) {
+			*error_code = ERR_ASM_MSG_QUEUE_RCV_ERROR;
+			asm_error_r("[Error] >>>> ASM_get_subsession : Msgrcv failed (%d,%s) \n", errno, strerror(errno));
+			return false;
+		}
+	}
+
+	*subsession_value = asm_rcv_msg.data.result_sound_command;
+
+	asm_info(">>>> ASM_get_subsession with subsession value [%d]\n", *subsession_value);
 
 	return true;
 }

@@ -1,9 +1,9 @@
 Name:       audio-session-manager
-Summary:    Audioxi Session Manager
-Version:	0.1.19
+Summary:    Audio Session Manager
+Version: 0.2.0
 Release:    1
 Group:      TO_BE/FILLED_IN
-License:    Apache-2.0
+License:    TO BE FILLED IN
 Source0:    %{name}-%{version}.tar.gz
 Requires(post): /sbin/ldconfig
 Requires(post): /usr/bin/vconftool
@@ -47,7 +47,7 @@ auido-session-manager development package for sdk release for audio-session
 
 %autogen --disable-static --noconfigure
 LDFLAGS="$LDFLAGS -Wl,--rpath=%{prefix}/lib -Wl,--hash-style=both -Wl,--as-needed "; export LDFLAGS
-CFLAGS="%{optflags} -fvisibility=hidden -DEXPORT_API=\"__attribute__((visibility(\\\"default\\\")))\"" ; export CFLAGS
+CFLAGS="%{optflags} -fvisibility=hidden -DMM_DEBUG_FLAG -DEXPORT_API=\"__attribute__((visibility(\\\"default\\\")))\"" ; export CFLAGS
 %configure --disable-static --enable-security
 make %{?jobs:-j%jobs}
 
@@ -62,28 +62,21 @@ rm -rf %{buildroot}
 
 vconftool set -t int memory/Sound/SoundStatus "0" -i
 
-mkdir -p /etc/rc.d/rc3.d
-mkdir -p /etc/rc.d/rc4.d
-ln -s /etc/rc.d/init.d/audiosessionmanager /etc/rc.d/rc3.d/S30audiosessionmanager
-ln -s /etc/rc.d/init.d/audiosessionmanager /etc/rc.d/rc4.d/S30audiosessionmanager
-
 %postun 
 /sbin/ldconfig
 
-rm -f /etc/rc.d/rc3.d/S30audiosessionmanager
-rm -f /etc/rc.d/rc4.d/S30audiosessionmanager
-
-
 %files
-%{_sysconfdir}/rc.d/init.d/audiosessionmanager
-%{_bindir}/audio-session-mgr-server
+%defattr(-,root,root,-)
 %{_libdir}/libaudio-session-mgr.so.*
 
 %files devel
+%defattr(-,root,root,-)
 %{_includedir}/mmf/audio-session-manager-types.h
 %{_includedir}/mmf/audio-session-manager.h
 
+
 %files sdk-devel
+%defattr(-,root,root,-)
 %{_includedir}/mmf/audio-session-manager-types.h
 %{_includedir}/mmf/audio-session-manager.h
 %{_libdir}/libaudio-session-mgr.so

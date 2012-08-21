@@ -94,11 +94,6 @@ install: build
 
 	# Add here commands to install the package into debian/ncurses.
 	$(MAKE) DESTDIR=$(CURDIR)/debian/tmp install
-	mkdir -p $(CURDIR)/debian/tmp/etc/rc.d/rc3.d/
-	ln -s ../init.d/audiosessionmanager $(CURDIR)/debian/tmp/etc/rc.d/rc3.d/S30audiosessionmanager
-	mkdir -p $(CURDIR)/debian/tmp/etc/rc.d/rc4.d/
-	ln -s ../init.d/audiosessionmanager $(CURDIR)/debian/tmp/etc/rc.d/rc4.d/S30audiosessionmanager
-
 
 # Build architecture-independent files here.
 binary-indep: build install
