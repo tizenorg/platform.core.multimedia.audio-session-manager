@@ -1,3 +1,0 @@
-#!/bin/sh
-
-vconftool set -t int memory/Sound/SoundStatus "0" -i 

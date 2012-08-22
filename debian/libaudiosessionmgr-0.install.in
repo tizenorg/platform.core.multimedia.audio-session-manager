@@ -1,2 +1,0 @@
-# if your module, creates shared libraries
-@PREFIX@/lib/*.so*
