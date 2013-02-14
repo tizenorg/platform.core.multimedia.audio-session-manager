@@ -53,6 +53,9 @@ bool
 ASM_register_sound(const int application_pid, int *asm_handle, ASM_sound_events_t sound_event,
 		ASM_sound_states_t sound_state, ASM_sound_cb_t callback, void* cb_data, ASM_resource_t mm_resource, int *error_code);
 
+bool
+ASM_register_sound_ex (const int application_pid, int *asm_handle, ASM_sound_events_t sound_event,
+		ASM_sound_states_t sound_state, ASM_sound_cb_t callback, void* cb_data, ASM_resource_t mm_resource, int *error_code, int (*func)(void*,void*));
 
 /**
  * This function unregister sound event to ASM server. If unregistered, sound event is not playing.
@@ -65,6 +68,7 @@ ASM_register_sound(const int application_pid, int *asm_handle, ASM_sound_events_
 bool 
 ASM_unregister_sound(const int asm_handle, ASM_sound_events_t sound_event, int *error_code);
 
+bool ASM_unregister_sound_ex(const int asm_handle, ASM_sound_events_t sound_event, int *error_code, int (*func)(void*,void*));
 
 
 /**
@@ -118,7 +122,7 @@ ASM_get_process_session_state(const int asm_handle, ASM_sound_states_t *sound_st
 bool 
 ASM_set_sound_state(const int asm_handle, ASM_sound_events_t sound_event, ASM_sound_states_t sound_state, ASM_resource_t mm_resource, int *error_code);
 
-
+bool ASM_set_sound_state_ex (const int asm_handle, ASM_sound_events_t sound_event, ASM_sound_states_t sound_state, ASM_resource_t mm_resource, int *error_code, int (*func)(void*,void*));
 
 /**
  * This function ask sound policy to ASM server.

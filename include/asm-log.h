@@ -24,25 +24,17 @@
 
 #ifdef __DEBUG_MODE__
 #include <stdio.h>
-#ifdef __USE_LOGMANAGER__
-#include <mm_log.h>
-#endif
-#endif
-
-#ifdef __DEBUG_MODE__
 
 #ifdef __USE_LOGMANAGER__
-#define asm_info_r(msg, args...) log_print_rel((LOG_SESSIONMGR), (LOG_CLASS_INFO), (msg), ##args)
-#define asm_warning_r(msg, args...) log_print_rel((LOG_SESSIONMGR), (LOG_CLASS_WARNING), (msg), ##args)
-#define asm_error_r(msg, args...) log_print_rel((LOG_SESSIONMGR), (LOG_CLASS_ERR), (msg), ##args)
-#define asm_critical_r(msg, args...) log_print_rel((LOG_SESSIONMGR), (LOG_CLASS_CRITICAL), (msg), ##args)
-#define asm_assert_r(condition)  log_assert_rel((condition))
+#include <dlog.h>
 
-#define asm_info(msg, args...) log_print_dbg((LOG_SESSIONMGR), LOG_CLASS_INFO, (msg), ##args)
-#define asm_warning(msg, args...) log_print_dbg((LOG_SESSIONMGR), LOG_CLASS_WARNING, (msg), ##args)
-#define asm_error(msg, args...) log_print_dbg((LOG_SESSIONMGR), LOG_CLASS_ERR, (msg), ##args)
-#define asm_critical(msg, args...) log_print_dbg((LOG_SESSIONMGR), LOG_CLASS_CRITICAL, (msg), ##args)
-#define asm_assert(condition)  log_assert_dbg((condition))
+#define LOG_TAG	"MMFW_SESSIONMGR"
+#define asm_info(fmt, arg...) SLOG(LOG_VERBOSE, LOG_TAG, "<DEBUG> [%s:%d] "fmt"", __FUNCTION__,__LINE__,##arg)
+#define asm_warning(fmt, arg...) SLOG(LOG_WARN, LOG_TAG, "<WARNI> [%s:%d] "fmt"", __FUNCTION__,__LINE__,##arg)
+#define asm_error(fmt, arg...) SLOG(LOG_ERROR, LOG_TAG, "<ERROR> [%s:%d] "fmt"", __FUNCTION__,__LINE__,##arg)
+#define asm_critical(fmt, arg...) SLOG(LOG_ERROR, LOG_TAG, "<FATAL> [%s:%d] "fmt"", __FUNCTION__,__LINE__,##arg)
+#define asm_fenter()	SLOG(LOG_VERBOSE, LOG_TAG, "<ENTER> [%s:%d]", __FUNCTION__,__LINE__)
+#define asm_fleave()	SLOG(LOG_VERBOSE, LOG_TAG, "<LEAVE> [%s:%d]", __FUNCTION__,__LINE__)
 
 #else	//__USE_LOGMANAGER__
 
@@ -57,6 +49,8 @@
 #define asm_error(msg, args...) fprintf(stderr, msg, ##args)
 #define asm_critical(msg, args...) fprintf(stderr, msg, ##args)
 #define asm_assert(condition)			(condition)
+#define asm_fenter()
+#define asm_fleave()
 
 #endif	//__USE_LOGMANAGER__
 
@@ -73,6 +67,8 @@
 #define asm_error(msg, args...)
 #define asm_critical(msg, args...)
 #define asm_assert(condition)		(condition)
+#define asm_fenter()
+#define asm_fleave()
 
 #endif  // __DEBUG_MODE__
 

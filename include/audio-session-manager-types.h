@@ -35,23 +35,25 @@
 #define ERR_ASM_MSG_QUEUE_MSGID_GET_FAILED 	0x03
 #define ERR_ASM_MSG_QUEUE_SND_ERROR 		0x04
 #define ERR_ASM_MSG_QUEUE_RCV_ERROR 		0x05
-#define ERR_ASM_ALREADY_REGISTERED 			0x06
+#define ERR_ASM_ALREADY_REGISTERED 		0x06
 #define ERR_ASM_ALREADY_UNREGISTERED 		0x07
-#define ERR_ASM_EVENT_IS_INVALID 			0x08
-#define ERR_ASM_EVENT_IS_FULL 				0x09
-#define ERR_ASM_POLICY_CANNOT_PLAY			0x10
-#define ERR_ASM_POLICY_INVALID_HANDLE		0x11
-#define ERR_ASM_INVALID_PARAMETER			0x12
-#define ERR_ASM_VCONF_ERROR					0x13
-#define ERR_ASM_UNKNOWN_ERROR 				0x0F
-#define ERR_ASM_HANDLE_IS_FULL				0x20
+#define ERR_ASM_EVENT_IS_INVALID 		0x08
+#define ERR_ASM_EVENT_IS_FULL 			0x09
+#define ERR_ASM_POLICY_CANNOT_PLAY		0x10
+#define ERR_ASM_POLICY_CANNOT_PLAY_BY_CALL	0x11	/* CALL / VIDEOCALL / RICH_CALL */
+#define ERR_ASM_POLICY_CANNOT_PLAY_BY_ALARM	0x12
+#define ERR_ASM_POLICY_INVALID_HANDLE		0x1f
+#define ERR_ASM_INVALID_PARAMETER		0x20
+#define ERR_ASM_VCONF_ERROR			0x21
+#define ERR_ASM_UNKNOWN_ERROR 			0x2F
+#define ERR_ASM_HANDLE_IS_FULL			0x30
 #ifdef USE_SECURITY
-#define ERR_ASM_CHECK_PRIVILEGE_FAILED		0x30
-#define COOKIE_SIZE	20
+#define ERR_ASM_CHECK_PRIVILEGE_FAILED		0x40
+#define COOKIE_SIZE				20
 #endif
 
 
-#define ASM_PRIORITY_MATRIX_MIN (ASM_EVENT_MAX-1)//13
+#define ASM_PRIORITY_MATRIX_MIN (ASM_EVENT_MAX-1)
 #define ASM_SERVER_HANDLE_MAX 256 
 
 
@@ -62,14 +64,15 @@
 typedef enum
 {
 	ASM_REQUEST_REGISTER 		= 0,
-	ASM_REQUEST_UNREGISTER	= 1,
-	ASM_REQUEST_GETSTATE		= 2,
-	ASM_REQUEST_GETMYSTATE	= 3,
-	ASM_REQUEST_SETSTATE		= 4,
-	ASM_REQUEST_EMERGENT_EXIT = 5,
-	ASM_REQUEST_DUMP = 6,
+	ASM_REQUEST_UNREGISTER,
+	ASM_REQUEST_GETSTATE,
+	ASM_REQUEST_GETMYSTATE,
+	ASM_REQUEST_SETSTATE,
+	ASM_REQUEST_EMERGENT_EXIT,
+	ASM_REQUEST_DUMP,
+	ASM_REQUEST_SET_SUBSESSION,
+	ASM_REQUEST_GET_SUBSESSION,
 } ASM_requests_t;
-
 
 /**
   * This enumeration defines sound event for Sound Scenario in Multimedia Resources Conflict Manager.
@@ -96,6 +99,9 @@ typedef enum
 	ASM_EVENT_ALARM,
 	ASM_EVENT_VIDEOCALL,
 	ASM_EVENT_MONITOR,
+	ASM_EVENT_RICH_CALL,
+	ASM_EVENT_EMERGENCY,
+	ASM_EVENT_EXCLUSIVE_RESOURCE,
 	ASM_EVENT_MAX
 } ASM_sound_events_t;
 
@@ -104,14 +110,16 @@ typedef enum
  */
 typedef enum
 {
-	ASM_EVENT_SOURCE_OTHER_APP = 0,
+	ASM_EVENT_SOURCE_MEDIA = 0,
 	ASM_EVENT_SOURCE_CALL_START,
-	ASM_EVENT_SOURCE_CALL_END,
 	ASM_EVENT_SOURCE_EARJACK_UNPLUG,
 	ASM_EVENT_SOURCE_RESOURCE_CONFLICT,
 	ASM_EVENT_SOURCE_ALARM_START,
 	ASM_EVENT_SOURCE_ALARM_END,
+	ASM_EVENT_SOURCE_EMERGENCY_START,
+	ASM_EVENT_SOURCE_EMERGENCY_END,
 	ASM_EVENT_SOURCE_OTHER_PLAYER_APP,
+	ASM_EVENT_SOURCE_RESUMABLE_MEDIA,
 } ASM_event_sources_t;
 
 /**
@@ -124,7 +132,8 @@ typedef enum
 	ASM_CASE_1PLAY_2STOP			= 1,
 	ASM_CASE_1STOP_2PLAY			= 5,
 	ASM_CASE_1PAUSE_2PLAY			= 6,
-	ASM_CASE_1PLAY_2PLAY_MIX		= 8
+	ASM_CASE_1PLAY_2PLAY_MIX		= 8,
+	ASM_CASE_RESOURCE_CHECK			= 9
 } ASM_sound_cases_t;
 
 
@@ -154,6 +163,9 @@ typedef enum
 	ASM_STATUS_ALARM						= 0x00100000,
 	ASM_STATUS_VIDEOCALL						= 0x20000000, //Watch out
 	ASM_STATUS_MONITOR					= 0x80000000, //watch out
+	ASM_STATUS_RICH_CALL				= 0x40000000, //Watch out
+	ASM_STATUS_EMERGENCY				= 0x00004000,
+	ASM_STATUS_EXCLUSIVE_RESOURCE		= 0x00008000,
 } ASM_sound_status_t;
 
 
@@ -162,13 +174,13 @@ typedef enum
   */
 typedef enum
 {
-	ASM_STATE_IGNORE			= -1,
 	ASM_STATE_NONE 			= 0,
 	ASM_STATE_PLAYING			= 1,
 	ASM_STATE_WAITING			= 2,
 	ASM_STATE_STOP			= 3,
 	ASM_STATE_PAUSE			= 4,
 	ASM_STATE_PAUSE_BY_APP	= 5,
+	ASM_STATE_IGNORE			= 6,
 } ASM_sound_states_t;
 
 
@@ -226,7 +238,7 @@ typedef enum
   */
 typedef struct
 {
-	int							handle;
+	int					handle;
 	ASM_requests_t				request_id;
 	ASM_sound_events_t			sound_event;
 	ASM_sound_states_t			sound_state;
@@ -241,12 +253,13 @@ typedef struct
   */
 typedef struct
 {
-	int							alloc_handle;
-	int 						cmd_handle;
-	ASM_sound_commands_t		result_sound_command;
+	int					alloc_handle;
+	int 					cmd_handle;
+	ASM_sound_commands_t			result_sound_command;
 	ASM_sound_states_t			result_sound_state;
+	ASM_sound_events_t			former_sound_event;
 #ifdef USE_SECURITY
-	int							check_privilege;
+	int					check_privilege;
 #endif
 } __ASM_msg_data_asm_to_lib_t;
 
@@ -314,6 +327,9 @@ static const ASM_sound_event_type_t ASM_sound_type[] = {
     { ASM_EVENT_ALARM, 					ASM_STATUS_ALARM },
     { ASM_EVENT_VIDEOCALL, 					ASM_STATUS_VIDEOCALL },
     { ASM_EVENT_MONITOR,				ASM_STATUS_MONITOR },
+    { ASM_EVENT_RICH_CALL, 				ASM_STATUS_RICH_CALL },
+    { ASM_EVENT_EMERGENCY,				ASM_STATUS_EMERGENCY },
+    { ASM_EVENT_EXCLUSIVE_RESOURCE,		ASM_STATUS_EXCLUSIVE_RESOURCE },
 };
 
 

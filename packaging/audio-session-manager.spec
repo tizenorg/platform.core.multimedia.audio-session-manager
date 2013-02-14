@@ -1,16 +1,15 @@
 Name:       audio-session-manager
-Summary:    Audioxi Session Manager
-Version:    0.1.14
-Release:    1
+Summary:    Audio Session Manager
+Version:    0.2.6
+Release:    0
 Group:      TO_BE/FILLED_IN
 License:    TO BE FILLED IN
 Source0:    %{name}-%{version}.tar.gz
 Requires(post): /sbin/ldconfig
 Requires(post): /usr/bin/vconftool
 Requires(postun): /sbin/ldconfig
-BuildRequires:  vconf-keys-devel
 BuildRequires:  pkgconfig(glib-2.0)
-BuildRequires:  pkgconfig(mm-log)
+BuildRequires:  pkgconfig(mm-common)
 BuildRequires:  pkgconfig(sysman)
 BuildRequires:  pkgconfig(vconf)
 BuildRequires:  pkgconfig(avsysaudio)
@@ -34,7 +33,7 @@ Audio-session-manager development package  (devel)
 %package sdk-devel
 Summary:    auido-session-manager development package for sdk release
 Group:      Development/Libraries
-Requires:   %{name} = %{version}-%{release}
+Requires:   %{name}-devel = %{version}-%{release}
 
 %description sdk-devel
 auido-session-manager development package for sdk release for audio-session
@@ -48,9 +47,9 @@ auido-session-manager development package for sdk release for audio-session
 
 %autogen --disable-static --noconfigure
 LDFLAGS="$LDFLAGS -Wl,--rpath=%{prefix}/lib -Wl,--hash-style=both -Wl,--as-needed "; export LDFLAGS
-CFLAGS="%{optflags} -fvisibility=hidden -DEXPORT_API=\"__attribute__((visibility(\\\"default\\\")))\"" ; export CFLAGS
+CFLAGS="%{optflags} -fvisibility=hidden -DMM_DEBUG_FLAG -DEXPORT_API=\"__attribute__((visibility(\\\"default\\\")))\"" ; export CFLAGS
 %configure --disable-static --enable-security
-make 
+make %{?jobs:-j%jobs}
 
 %install
 rm -rf %{buildroot}
@@ -61,19 +60,16 @@ rm -rf %{buildroot}
 %post 
 /sbin/ldconfig
 
-vconftool set -t int memory/Sound/SoundStatus "0" -i
+vconftool set -t int memory/Sound/SoundStatus "0" -g 29 -f -i
 
-%postun -p /sbin/ldconfig
-
-
-
-
+%postun 
+/sbin/ldconfig
 
 %files
+%manifest audio-session-manager.manifest
 %defattr(-,root,root,-)
-%{_sysconfdir}/rc.d/init.d/audiosessionmanager
-%{_bindir}/audio-session-mgr-server
 %{_libdir}/libaudio-session-mgr.so.*
+%{_bindir}/asm_testsuite
 
 %files devel
 %defattr(-,root,root,-)
