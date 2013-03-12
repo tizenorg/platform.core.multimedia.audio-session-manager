@@ -6,6 +6,6 @@ includedir=@includedir@
 Name: audio-session-mgr
 Description: audio-session-mgr
 Version: @VERSION@ 
-Requires: vconf sysman mm-log
+Requires: vconf sysman mm-common
 Libs: -L${libdir} -laudio-session-mgr
 Cflags: -I${includedir}/mmf
