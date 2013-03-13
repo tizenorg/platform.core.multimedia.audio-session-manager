@@ -1,9 +1,0 @@
-#!/bin/sh
-
-vconftool set -t int memory/Sound/SoundStatus "0" -i 
-if [ -n "`env|grep SBOX`" ]; then
-    echo "postinst: sbox installation skip lauching daemon"
-else
-	echo "postinst: run audio-session-mgr-server again"
-	/usr/bin/audio-session-mgr-server&
-fi
