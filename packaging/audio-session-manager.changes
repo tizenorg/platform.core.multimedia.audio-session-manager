@@ -1,0 +1,3 @@
+* Tue May 28 2013 Xavier Roche <xavrock.os@gmail.com> accepted/tizen/20130520.101105@69cd4f6
+- Fix x86_64 build-install compliance
+
