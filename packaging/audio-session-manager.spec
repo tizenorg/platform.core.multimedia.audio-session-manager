@@ -46,7 +46,7 @@ auido-session-manager development package for sdk release for audio-session
 %build
 
 %autogen --disable-static --noconfigure
-LDFLAGS="$LDFLAGS -Wl,--rpath=%{prefix}/lib -Wl,--hash-style=both -Wl,--as-needed "; export LDFLAGS
+LDFLAGS="$LDFLAGS -Wl,--rpath=%{_libdir} -Wl,--hash-style=both -Wl,--as-needed "; export LDFLAGS
 CFLAGS="%{optflags} -fvisibility=hidden -DMM_DEBUG_FLAG -DEXPORT_API=\"__attribute__((visibility(\\\"default\\\")))\"" ; export CFLAGS
 %configure --disable-static --enable-security
 make %{?jobs:-j%jobs}
