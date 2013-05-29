@@ -1,0 +1,8 @@
+Change-Id: I41305ae2d1ae14c9814809b30e074c7abd5c1ee4
+Code-Review+2: Anas Nashif
+Verified+1: Rusty Lynch <rusty.lynch@intel.com>
+Submitted-by: Rusty Lynch <rusty.lynch@intel.com>
+Submitted-at: Wed, 29 May 2013 00:13:53 -0700
+Reviewed-on: https://review.tizen.org/gerrit/3704
+Project: platform/core/multimedia/audio-session-manager
+Branch: refs/heads/tizen
