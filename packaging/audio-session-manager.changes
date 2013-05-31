@@ -1,3 +1,6 @@
+* Fri May 31 2013 Anas Nashif <anas.nashif@intel.com> accepted/tizen/20130520.101105@41305ae
+- Remove placeholders and cleanup spec
+
 * Tue May 28 2013 Xavier Roche <xavrock.os@gmail.com> accepted/tizen/20130520.101105@69cd4f6
 - Fix x86_64 build-install compliance
 

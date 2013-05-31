@@ -2,8 +2,8 @@ Name:       audio-session-manager
 Summary:    Audio Session Manager
 Version:    0.2.6
 Release:    0
-Group:      TO_BE/FILLED_IN
-License:    TO BE FILLED IN
+Group:      Multimedia/Service
+License:    Apache-2.0
 Source0:    %{name}-%{version}.tar.gz
 Requires(post): /sbin/ldconfig
 Requires(post): /usr/bin/vconftool
@@ -17,44 +17,42 @@ BuildRequires:  pkgconfig(security-server)
 
 
 %description
-audio-session-manager development package 
-
+Audio Session Manager.
 
 
 %package devel
-Summary:    Audio-session-manager package  (devel)
-Group:      Development/Libraries
+Summary:    Audio Session Manager package  (devel)
+Group:      Multimedia/Development
 Requires:   %{name} = %{version}-%{release}
 
 %description devel
-Audio-session-manager development package  (devel)
-
+%devel_desc
 
 %package sdk-devel
-Summary:    auido-session-manager development package for sdk release
-Group:      Development/Libraries
+Summary:    Audio Session Manager development package for sdk release
+Group:      Multimedia/Development
 Requires:   %{name}-devel = %{version}-%{release}
 
 %description sdk-devel
-auido-session-manager development package for sdk release for audio-session
+%devel_desc
+
+SDK Release.
+
 
 
 %prep
-%setup -q -n audio-session-manager-%{version}
+%setup -q 
 
 
 %build
 
 %autogen --disable-static --noconfigure
-LDFLAGS="$LDFLAGS -Wl,--rpath=%{_libdir} -Wl,--hash-style=both -Wl,--as-needed "; export LDFLAGS
 CFLAGS="%{optflags} -fvisibility=hidden -DMM_DEBUG_FLAG -DEXPORT_API=\"__attribute__((visibility(\\\"default\\\")))\"" ; export CFLAGS
 %configure --disable-static --enable-security
 make %{?jobs:-j%jobs}
 
 %install
-rm -rf %{buildroot}
 %make_install
-
 
 
 %post 
@@ -62,10 +60,10 @@ rm -rf %{buildroot}
 
 vconftool set -t int memory/Sound/SoundStatus "0" -g 29 -f -i
 
-%postun 
-/sbin/ldconfig
+%postun -p /sbin/ldconfig
 
 %files
+%license LICENSE
 %manifest audio-session-manager.manifest
 %defattr(-,root,root,-)
 %{_libdir}/libaudio-session-mgr.so.*
