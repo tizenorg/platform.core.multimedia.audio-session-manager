@@ -5,6 +5,7 @@ Release:    0
 Group:      Multimedia/Service
 License:    Apache-2.0
 Source0:    %{name}-%{version}.tar.gz
+Source1001: 	audio-session-manager.manifest
 Requires(post): /sbin/ldconfig
 Requires(post): /usr/bin/vconftool
 Requires(postun): /sbin/ldconfig
@@ -42,6 +43,7 @@ SDK Release.
 
 %prep
 %setup -q 
+cp %{SOURCE1001} .
 
 
 %build
@@ -63,6 +65,7 @@ vconftool set -t int memory/Sound/SoundStatus "0" -g 29 -f -i
 %postun -p /sbin/ldconfig
 
 %files
+%manifest %{name}.manifest
 %license LICENSE
 %manifest audio-session-manager.manifest
 %defattr(-,root,root,-)
@@ -70,12 +73,14 @@ vconftool set -t int memory/Sound/SoundStatus "0" -g 29 -f -i
 %{_bindir}/asm_testsuite
 
 %files devel
+%manifest %{name}.manifest
 %defattr(-,root,root,-)
 %{_includedir}/mmf/audio-session-manager-types.h
 %{_includedir}/mmf/audio-session-manager.h
 
 
 %files sdk-devel
+%manifest %{name}.manifest
 %defattr(-,root,root,-)
 %{_includedir}/mmf/audio-session-manager-types.h
 %{_includedir}/mmf/audio-session-manager.h
