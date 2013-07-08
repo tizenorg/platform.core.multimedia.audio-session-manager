@@ -1,0 +1,8 @@
+Change-Id: I9226f6a77ba5b3a466ff7113479cab7cff770788
+Code-Review+2: Ryan Ware <ware@linux.intel.com>
+Verified+1: Ryan Ware <ware@linux.intel.com>
+Submitted-by: Ryan Ware <ware@linux.intel.com>
+Submitted-at: Mon, 08 Jul 2013 10:07:32 -0700
+Reviewed-on: https://review.tizen.org/gerrit/4452
+Project: platform/core/multimedia/audio-session-manager
+Branch: refs/heads/tizen
