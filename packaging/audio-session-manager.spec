@@ -1,7 +1,7 @@
 %bcond_with audio_session_manager_with_murphy
 Name:       audio-session-manager
 Summary:    Audio Session Manager
-Version:    0.2.6
+Version:    0.2.6.1
 Release:    0
 Group:      Multimedia/Service
 License:    Apache-2.0

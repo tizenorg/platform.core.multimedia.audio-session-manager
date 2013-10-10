@@ -1,3 +1,6 @@
+* Thu Oct 10 2013 Ismo Puustinen <ismo.puustinen@intel.com> 0.2.6.1
+- Removed vconf support. Fixes: TIVI-1960
+
 * Fri May 31 2013 Anas Nashif <anas.nashif@intel.com> accepted/tizen/20130520.101105@41305ae
 - Remove placeholders and cleanup spec
 
