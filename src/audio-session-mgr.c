@@ -159,6 +159,9 @@ int __ASM_find_index(int handle);
 
 bool __ASM_get_sound_state(unsigned int *all_sound_status, int *error_code)
 {
+#ifdef MURPHY
+	*all_sound_status = ASM_STATUS_NONE;
+#else
 	int value = 0;
 
 	if(vconf_get_int(SOUND_STATUS_KEY, &value)) {
@@ -169,7 +172,7 @@ bool __ASM_get_sound_state(unsigned int *all_sound_status, int *error_code)
 	debug_msg("All status(%#X)", value);
 	*all_sound_status = value;
 	ASM_all_sound_status = value;
-
+#endif
 	return true;
 }
 

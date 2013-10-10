@@ -1,3 +1,4 @@
+%bcond_with audio_session_manager_with_murphy
 Name:       audio-session-manager
 Summary:    Audio Session Manager
 Version:    0.2.6
@@ -50,6 +51,9 @@ cp %{SOURCE1001} .
 
 %autogen --disable-static --noconfigure
 CFLAGS="%{optflags} -fvisibility=hidden -DMM_DEBUG_FLAG -DEXPORT_API=\"__attribute__((visibility(\\\"default\\\")))\"" ; export CFLAGS
+%if %{with audio_session_manager_with_murphy}
+CFLAGS="$CFLAGS -DMURPHY"; export CFLAGS
+%endif
 %configure --disable-static --enable-security
 make %{?jobs:-j%jobs}
 
