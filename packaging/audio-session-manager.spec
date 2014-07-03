@@ -5,16 +5,17 @@ Release:    0
 Group:      Multimedia/Service
 License:    Apache-2.0
 Source0:    %{name}-%{version}.tar.gz
-Source1001: audio-session-manager.manifest
-Requires(post): /sbin/ldconfig
-Requires(post): /usr/bin/vconftool
-Requires(postun): /sbin/ldconfig
-BuildRequires:  pkgconfig(glib-2.0)
-BuildRequires:  pkgconfig(mm-common)
-BuildRequires:  pkgconfig(sysman)
-BuildRequires:  pkgconfig(vconf)
-BuildRequires:  pkgconfig(avsysaudio)
-BuildRequires:  pkgconfig(security-server)
+Source1001:         audio-session-manager.manifest
+Requires(post):     /sbin/ldconfig
+Requires(post):     /usr/bin/vconftool
+Requires(postun):   /sbin/ldconfig
+BuildRequires:      pkgconfig
+BuildRequires:      pkgconfig(glib-2.0)
+BuildRequires:      pkgconfig(mm-common)
+BuildRequires:      pkgconfig(sysman)
+BuildRequires:      pkgconfig(vconf)
+BuildRequires:      pkgconfig(avsysaudio)
+BuildRequires:      pkgconfig(security-server)
 
 %description
 Audio Session Manager package.
