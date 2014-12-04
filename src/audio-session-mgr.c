@@ -217,7 +217,6 @@ gboolean asm_callback_handler( gpointer d)
 {
 	GPollFD *data = (GPollFD*)d;
 	unsigned int buf;
-	int count;
 	int tid = 0;
 	int asm_index = 0;
 	debug_fenter();
@@ -232,10 +231,8 @@ gboolean asm_callback_handler( gpointer d)
 		int event_src;
 		unsigned int sound_status_value;
 		ASM_sound_commands_t rcv_command;
-		ASM_cb_result_t cb_res = ASM_CB_RES_NONE;
+        	ASM_cb_result_t cb_res = ASM_CB_RES_NONE;
 
-
-		count = read(data->fd, &buf, sizeof(int));
 
 		handle = (int)( buf & 0x0000ffff);
 		rcv_command = (ASM_sound_commands_t)((buf >> 16) & 0x0f);
