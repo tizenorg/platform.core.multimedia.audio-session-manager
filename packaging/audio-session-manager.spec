@@ -1,6 +1,10 @@
 Name:       audio-session-manager
 Summary:    Audio Session Manager
+<<<<<<< HEAD
 Version:    0.2.7
+=======
+Version:    0.4.6
+>>>>>>> 319c01a... Remove RESUME CANCEL feature
 Release:    0
 Group:      Multimedia/Service
 License:    Apache-2.0
