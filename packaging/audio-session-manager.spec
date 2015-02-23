@@ -12,6 +12,7 @@ Requires(postun): /sbin/ldconfig
 BuildRequires:  pkgconfig(glib-2.0)
 BuildRequires:  pkgconfig(mm-common)
 BuildRequires:  pkgconfig(vconf)
+BuildRequires:  pkgconfig(gio-2.0)
 
 %description
 Audio Session Manager package.
