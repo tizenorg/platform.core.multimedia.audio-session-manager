@@ -759,6 +759,9 @@ bool ASM_register_sound_ex (const int application_pid, int *asm_handle, ASM_soun
 	GDBusConnection *conn = NULL;
 	GVariant *res_variant = NULL;
 	GVariant *client_variant = NULL;
+#ifdef SUPPORT_CONTAINER
+	char container[128];
+#endif
 
 	debug_fenter();
 
@@ -835,8 +838,15 @@ bool ASM_register_sound_ex (const int application_pid, int *asm_handle, ASM_soun
 			g_error_free (err);
 			return false;
 		}
+		debug_error ("conn = %p", conn);
 
+#ifdef SUPPORT_CONTAINER
+		gethostname(container, sizeof(container));
+		debug_error ("container = %s", container);
+		client_variant = g_variant_new("(siiiiii)", container, asm_pid, handle, sound_event,
+#else
 		client_variant = g_variant_new("(iiiiii)", asm_pid, handle, sound_event,
+#endif
 										ASM_REQUEST_REGISTER, sound_state, mm_resource);
 		res_variant = g_dbus_connection_call_sync(conn, ASM_BUS_NAME_SOUND_SERVER, ASM_OBJECT_SOUND_SERVER, ASM_INTERFACE_SOUND_SERVER,
 										"ASMRegisterSound", client_variant, NULL, G_DBUS_CALL_FLAGS_NONE, -1, NULL,  &err);
@@ -1105,6 +1115,9 @@ bool ASM_set_watch_session (const int application_pid,	ASM_sound_events_t intere
 	GDBusConnection *conn = NULL;
 	GVariant *res_variant = NULL;
 	GVariant *client_variant = NULL;
+#ifdef SUPPORT_CONTAINER
+	char container[128];
+#endif
 
 	debug_fenter();
 
@@ -1177,7 +1190,13 @@ bool ASM_set_watch_session (const int application_pid,	ASM_sound_events_t intere
 		return false;
 	}
 
+#ifdef SUPPORT_CONTAINER
+	gethostname(container, sizeof(container));
+	debug_error ("container = %s", container);
+	client_variant = g_variant_new("(siiiiii)", container, asm_pid, handle, interest_sound_event,
+#else
 	client_variant = g_variant_new("(iiiiii)", asm_pid, handle, interest_sound_event,
+#endif
 									ASM_REQUEST_REGISTER_WATCHER, interest_sound_state, ASM_RESOURCE_NONE);
 	res_variant = g_dbus_connection_call_sync(conn, ASM_BUS_NAME_SOUND_SERVER, ASM_OBJECT_SOUND_SERVER, ASM_INTERFACE_SOUND_SERVER,
 									"ASMRegisterWatcher", client_variant, NULL, G_DBUS_CALL_FLAGS_NONE, -1, NULL,  &err);
