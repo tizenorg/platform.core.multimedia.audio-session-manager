@@ -789,7 +789,13 @@ bool ASM_register_sound_ex (const int application_pid, int *asm_handle, ASM_soun
 	int handle = 0;
 	int asm_pid = 0;
 	int index = 0;
-	int ret = 0;
+	GError *err = NULL;
+	GDBusConnection *conn = NULL;
+	GVariant *res_variant = NULL;
+	GVariant *client_variant = NULL;
+#ifdef SUPPORT_CONTAINER
+	char container[128];
+#endif
 
 	debug_fenter();
 
@@ -871,17 +877,22 @@ bool ASM_register_sound_ex (const int application_pid, int *asm_handle, ASM_soun
 			debug_error("failed to msgsnd(%d,%s)", errno, strerror(errno));
 			return false;
 		}
+		debug_error ("conn = %p", conn);
 
-		NO_EINTR(ret = msgrcv(asm_rcv_msgid, (void *)&asm_rcv_msg, sizeof(asm_rcv_msg.data), ASM_sound_handle[index].asm_tid, 0));
-		if (ret == -1) {
-			*error_code = ERR_ASM_MSG_QUEUE_RCV_ERROR;
-			debug_error("failed to msgrcv(%d,%s)", errno, strerror(errno));
-			return false;
-		}
-
-		if (asm_rcv_msg.data.source_request_id != ASM_REQUEST_REGISTER) {
-			*error_code = ERR_ASM_MSG_QUEUE_RCV_ERROR;
-			debug_error("received msg is not valid, source_request_id(%d)", asm_rcv_msg.data.source_request_id);
+#ifdef SUPPORT_CONTAINER
+		gethostname(container, sizeof(container));
+		debug_error ("container = %s", container);
+		client_variant = g_variant_new("(siiiiii)", container, asm_pid, handle, sound_event,
+#else
+		client_variant = g_variant_new("(iiiiii)", asm_pid, handle, sound_event,
+#endif
+										ASM_REQUEST_REGISTER, sound_state, mm_resource);
+		res_variant = g_dbus_connection_call_sync(conn, ASM_BUS_NAME_SOUND_SERVER, ASM_OBJECT_SOUND_SERVER, ASM_INTERFACE_SOUND_SERVER,
+										"ASMRegisterSound", client_variant, NULL, G_DBUS_CALL_FLAGS_NONE, -1, NULL,  &err);
+		if (!res_variant && err) {
+			debug_error("g_dbus_connection_call_sync fail(%s)", err->message);
+			*error_code = ERR_ASM_GDBUS_CONNECTION_ERROR;
+			g_error_free (err);
 			return false;
 		}
 	}
@@ -1117,7 +1128,13 @@ bool ASM_set_watch_session (const int application_pid,	ASM_sound_events_t intere
 	int handle = 0;
 	int asm_pid = 0;
 	int index = 0;
-	int ret = 0;
+	GError *err = NULL;
+	GDBusConnection *conn = NULL;
+	GVariant *res_variant = NULL;
+	GVariant *client_variant = NULL;
+#ifdef SUPPORT_CONTAINER
+	char container[128];
+#endif
 
 	debug_fenter();
 
@@ -1193,12 +1210,16 @@ bool ASM_set_watch_session (const int application_pid,	ASM_sound_events_t intere
 		return false;
 	}
 
-	NO_EINTR(ret = msgsnd(asm_snd_msgid, (void *)&asm_snd_msg, sizeof(asm_snd_msg.data), 0));
-	if (ret == -1) {
-		*error_code = ERR_ASM_MSG_QUEUE_SND_ERROR;
-		debug_error("failed to msgsnd(%d,%s)", errno, strerror(errno));
-		return false;
-	}
+#ifdef SUPPORT_CONTAINER
+	gethostname(container, sizeof(container));
+	debug_error ("container = %s", container);
+	client_variant = g_variant_new("(siiiiii)", container, asm_pid, handle, interest_sound_event,
+#else
+	client_variant = g_variant_new("(iiiiii)", asm_pid, handle, interest_sound_event,
+#endif
+									ASM_REQUEST_REGISTER_WATCHER, interest_sound_state, ASM_RESOURCE_NONE);
+	res_variant = g_dbus_connection_call_sync(conn, ASM_BUS_NAME_SOUND_SERVER, ASM_OBJECT_SOUND_SERVER, ASM_INTERFACE_SOUND_SERVER,
+									"ASMRegisterWatcher", client_variant, NULL, G_DBUS_CALL_FLAGS_NONE, -1, NULL,  &err);
 
 	NO_EINTR(ret = msgrcv(asm_rcv_msgid, (void *)&asm_rcv_msg, sizeof(asm_rcv_msg.data), ASM_sound_handle[index].asm_tid, 0));
 	if (ret == -1) {

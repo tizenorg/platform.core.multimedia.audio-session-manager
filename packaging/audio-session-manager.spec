@@ -40,9 +40,12 @@ SDK Release.
 cp %{SOURCE1001} .
 
 %build
-CFLAGS="%{optflags} -fvisibility=hidden -DMM_DEBUG_FLAG -DEXPORT_API=\"__attribute__((visibility(\\\"default\\\")))\"" ; export CFLAGS
-%reconfigure --disable-static
-%__make %{?jobs:-j%jobs}
+
+%autogen --disable-static --noconfigure
+LDFLAGS="$LDFLAGS -Wl,--rpath=%{prefix}/lib -Wl,--hash-style=both -Wl,--as-needed "; export LDFLAGS
+CFLAGS="%{optflags} -fvisibility=hidden -DSUPPORT_CONTAINER -DMM_DEBUG_FLAG -DEXPORT_API=\"__attribute__((visibility(\\\"default\\\")))\"" ; export CFLAGS
+%configure --disable-static --disable-security
+make %{?jobs:-j%jobs}
 
 %install
 %make_install
