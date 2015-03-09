@@ -42,6 +42,14 @@
 #include <string.h>
 #include <mm_debug.h>
 
+#include <gio/gio.h>
+#include <unistd.h>
+
+#ifdef USE_SECURITY
+#include <security-server.h>
+#define COOKIE_SIZE 20
+#endif
+
 #if defined(USE_VCONF)
 #include <vconf.h>
 #include <errno.h>
@@ -781,6 +789,52 @@ static void __ASM_destroy_callback(int index)
 	debug_fleave();
 }
 
+#ifdef SUPPORT_CONTAINER
+#ifdef USE_SECURITY
+char* _get_cookie(int cookie_size)
+{
+	int retval = -1;
+	char* cookie = NULL;
+
+	if (security_server_get_cookie_size() != cookie_size) {
+		debug_error ("[Security] security_server_get_cookie_size() != COOKIE_SIZE(%d)\n", cookie_size);
+		return false;
+	}
+
+	cookie = (char*)malloc (cookie_size);
+
+	retval = security_server_request_cookie (cookie, cookie_size);
+	if (retval == SECURITY_SERVER_API_SUCCESS) {
+		debug_msg ("[Security] security_server_request_cookie() returns [%d]\n", retval);
+	} else {
+		debug_error ("[Security] security_server_request_cookie() returns [%d]\n", retval);
+	}
+
+	return cookie;
+}
+
+static GVariant* _get_cookie_variant ()
+{
+	int i;
+	GVariantBuilder builder;
+	char* cookie = NULL;
+
+	cookie = _get_cookie(COOKIE_SIZE);
+
+	if (cookie == NULL)
+		return NULL;
+
+	g_variant_builder_init(&builder, G_VARIANT_TYPE_ARRAY);
+	for (i = 0; i < COOKIE_SIZE; i++)
+		g_variant_builder_add(&builder, "y", cookie[i]);
+
+	free (cookie);
+	return g_variant_builder_end(&builder);
+}
+
+#endif /* USE_SECURITY */
+#endif /* SUPPORT_CONTAINER */
+
 EXPORT_API
 bool ASM_register_sound_ex (const int application_pid, int *asm_handle, ASM_sound_events_t sound_event, ASM_sound_states_t sound_state,
 						ASM_sound_cb_t callback, void *user_data, ASM_resource_t mm_resource, int *error_code, int (*func)(void*,void*))
@@ -880,13 +934,21 @@ bool ASM_register_sound_ex (const int application_pid, int *asm_handle, ASM_soun
 		debug_error ("conn = %p", conn);
 
 #ifdef SUPPORT_CONTAINER
+#ifdef USE_SECURITY
+		client_variant = g_variant_new("(@ayiiiiii)", _get_cookie_variant(), asm_pid, handle, sound_event,
+										ASM_REQUEST_REGISTER, sound_state, mm_resource);
+#else /* USE_SECURITY */
 		gethostname(container, sizeof(container));
 		debug_error ("container = %s", container);
 		client_variant = g_variant_new("(siiiiii)", container, asm_pid, handle, sound_event,
-#else
-		client_variant = g_variant_new("(iiiiii)", asm_pid, handle, sound_event,
-#endif
 										ASM_REQUEST_REGISTER, sound_state, mm_resource);
+#endif /* USE_SECURITY */
+
+#else /* SUPPORT_CONTAINER */
+		client_variant = g_variant_new("(iiiiii)", asm_pid, handle, sound_event,
+										ASM_REQUEST_REGISTER, sound_state, mm_resource);
+#endif /* SUPPORT_CONTAINER */
+
 		res_variant = g_dbus_connection_call_sync(conn, ASM_BUS_NAME_SOUND_SERVER, ASM_OBJECT_SOUND_SERVER, ASM_INTERFACE_SOUND_SERVER,
 										"ASMRegisterSound", client_variant, NULL, G_DBUS_CALL_FLAGS_NONE, -1, NULL,  &err);
 		if (!res_variant && err) {
@@ -1211,13 +1273,21 @@ bool ASM_set_watch_session (const int application_pid,	ASM_sound_events_t intere
 	}
 
 #ifdef SUPPORT_CONTAINER
+#ifdef USE_SECURITY
+	client_variant = g_variant_new("(@ayiiiiii)", _get_cookie_variant(), asm_pid, handle, interest_sound_event,
+									ASM_REQUEST_REGISTER_WATCHER, interest_sound_state, ASM_RESOURCE_NONE);
+#else /* USE_SECURITY */
 	gethostname(container, sizeof(container));
 	debug_error ("container = %s", container);
 	client_variant = g_variant_new("(siiiiii)", container, asm_pid, handle, interest_sound_event,
-#else
-	client_variant = g_variant_new("(iiiiii)", asm_pid, handle, interest_sound_event,
-#endif
 									ASM_REQUEST_REGISTER_WATCHER, interest_sound_state, ASM_RESOURCE_NONE);
+#endif /* USE_SECURITY */
+
+#else /* SUPPORT_CONTAINER */
+	client_variant = g_variant_new("(iiiiii)", asm_pid, handle, interest_sound_event,
+									ASM_REQUEST_REGISTER_WATCHER, interest_sound_state, ASM_RESOURCE_NONE);
+#endif /* SUPPORT_CONTAINER */
+
 	res_variant = g_dbus_connection_call_sync(conn, ASM_BUS_NAME_SOUND_SERVER, ASM_OBJECT_SOUND_SERVER, ASM_INTERFACE_SOUND_SERVER,
 									"ASMRegisterWatcher", client_variant, NULL, G_DBUS_CALL_FLAGS_NONE, -1, NULL,  &err);
 
