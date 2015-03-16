@@ -2271,13 +2271,33 @@ struct sigaction ASM_term_old_action;
 struct sigaction ASM_sys_old_action;
 struct sigaction ASM_xcpu_old_action;
 
-static void __ASM_signal_handler(int signo)
+static void __asm_notify_emergent_exit(GDBusConnection *conn, int exit_pid, int handle, int sound_event, int request_id, int sound_state)
+{
+	GVariant *client_variant = NULL;
+	GError *err = NULL;
+
+	debug_log("Send Signal EmergentExit");
+
+	client_variant = g_variant_new("(iiiii)", exit_pid, handle, sound_event, ASM_REQUEST_EMERGENT_EXIT, sound_state);
+	g_dbus_connection_emit_signal(conn, NULL, OBJECT_ASM, INTERFACE_ASM, "EmergentExit", client_variant, &err);
+	if(err) {
+		debug_error("g_dbus_connection_emit_signal fail(%s)", err->message);
+		g_error_free (err);
+	} else {
+		g_dbus_connection_flush_sync(conn, NULL, &err);
+		if(err) {
+			debug_error("g_dbus_connection_flush_sync fail(%s)", err->message);
+			g_error_free (err);
+		}
+	}
+}
+
+void __ASM_signal_handler(int signo)
 {
 	int exit_pid = 0;
 	int asm_index = 0;
 	GError *err = NULL;
 	GDBusConnection *conn = NULL;
-	GVariant *client_variant = NULL;
 
 	debug_warning("ENTER, sig.num(%d)",signo);
 
@@ -2297,15 +2317,8 @@ static void __ASM_signal_handler(int signo)
 				ASM_sound_handle[asm_index].is_for_watching == false) {
 			exit_pid = ASM_sound_handle[asm_index].asm_tid;
 			if (exit_pid == asmgettid()) {
-				client_variant = g_variant_new("(iiiii)",exit_pid, ASM_sound_handle[asm_index].handle, ASM_sound_handle[asm_index].sound_event,
-												ASM_REQUEST_EMERGENT_EXIT, ASM_sound_handle[asm_index].sound_state);
-				g_dbus_connection_call_sync(conn, ASM_BUS_NAME_SOUND_SERVER, ASM_OBJECT_SOUND_SERVER, ASM_INTERFACE_SOUND_SERVER,
-										"ASMEmergentExit", client_variant, NULL, G_DBUS_CALL_FLAGS_NONE, -1, NULL,  &err);
-				if(err) {
-					debug_error("g_dbus_connection_call_sync fail(%s)", err->message);
-					g_error_free (err);
-					return;
-				}
+				__asm_notify_emergent_exit(conn, exit_pid, ASM_sound_handle[asm_index].handle, ASM_sound_handle[asm_index].sound_event,
+							   ASM_REQUEST_EMERGENT_EXIT, ASM_sound_handle[asm_index].sound_state);
 			}
 		}
 	}
@@ -2398,15 +2411,8 @@ static void __attribute__((destructor)) __ASM_fini_module(void)
 				ASM_sound_handle[asm_index].is_for_watching == false) {
 			exit_pid = ASM_sound_handle[asm_index].asm_tid;
 			if (exit_pid == asmgettid()) {
-				client_variant = g_variant_new("(iiiii)",exit_pid, ASM_sound_handle[asm_index].handle, ASM_sound_handle[asm_index].sound_event,
-												ASM_REQUEST_EMERGENT_EXIT, ASM_sound_handle[asm_index].sound_state);
-				g_dbus_connection_call_sync(conn, ASM_BUS_NAME_SOUND_SERVER, ASM_OBJECT_SOUND_SERVER, ASM_INTERFACE_SOUND_SERVER,
-							"ASMEmergentExit", client_variant, NULL, G_DBUS_CALL_FLAGS_NONE, -1, NULL,  &err);
-				if(err) {
-					debug_error("g_dbus_connection_call_sync fail(%s)", err->message);
-					g_error_free (err);
-					return;
-				}
+				__asm_notify_emergent_exit(conn, exit_pid, ASM_sound_handle[asm_index].handle, ASM_sound_handle[asm_index].sound_event,
+						       ASM_REQUEST_EMERGENT_EXIT, ASM_sound_handle[asm_index].sound_state);
 			}
 		}
 	}

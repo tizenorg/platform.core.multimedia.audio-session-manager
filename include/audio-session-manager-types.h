@@ -75,6 +75,8 @@
 #define ASM_BUS_NAME_SOUND_SERVER "org.tizen.SoundServer"
 #define ASM_OBJECT_SOUND_SERVER "/org/tizen/SoundServer1"
 #define ASM_INTERFACE_SOUND_SERVER "org.tizen.SoundServer1"
+#define OBJECT_ASM "/org/tizen/asm"
+#define INTERFACE_ASM "org.tizen.asm"
 
 /**
   * This enumeration defines sound request.
