@@ -2295,10 +2295,33 @@ struct sigaction ASM_term_old_action;
 struct sigaction ASM_sys_old_action;
 struct sigaction ASM_xcpu_old_action;
 
-static void __ASM_signal_handler(int signo)
+static void __asm_notify_emergent_exit(GDBusConnection *conn, int exit_pid, int handle, int sound_event, int request_id, int sound_state)
+{
+	GVariant *client_variant = NULL;
+	GError *err = NULL;
+
+	debug_log("Send Signal EmergentExit");
+
+	client_variant = g_variant_new("(iiiii)", exit_pid, handle, sound_event, ASM_REQUEST_EMERGENT_EXIT, sound_state);
+	g_dbus_connection_emit_signal(conn, NULL, OBJECT_ASM, INTERFACE_ASM, "EmergentExit", client_variant, &err);
+	if(err) {
+		debug_error("g_dbus_connection_emit_signal fail(%s)", err->message);
+		g_error_free (err);
+	} else {
+		g_dbus_connection_flush_sync(conn, NULL, &err);
+		if(err) {
+			debug_error("g_dbus_connection_flush_sync fail(%s)", err->message);
+			g_error_free (err);
+		}
+	}
+}
+
+void __ASM_signal_handler(int signo)
 {
 	int exit_pid = 0;
 	int asm_index = 0;
+	GError *err = NULL;
+	GDBusConnection *conn = NULL;
 
 	debug_warning("ENTER, sig.num(%d)",signo);
 
@@ -2312,22 +2335,8 @@ static void __ASM_signal_handler(int signo)
 				ASM_sound_handle[asm_index].is_for_watching == false) {
 			exit_pid = ASM_sound_handle[asm_index].asm_tid;
 			if (exit_pid == asmgettid()) {
-				asm_snd_msg.instance_id = exit_pid;
-				asm_snd_msg.data.handle = ASM_sound_handle[asm_index].handle;
-				asm_snd_msg.data.request_id = ASM_REQUEST_EMERGENT_EXIT;
-				asm_snd_msg.data.sound_event = ASM_sound_handle[asm_index].sound_event;
-				asm_snd_msg.data.sound_state = ASM_sound_handle[asm_index].sound_state;
-
-				if (msgsnd(asm_snd_msgid, (void *)&asm_snd_msg, sizeof(asm_snd_msg.data), 0) < 0 ) {
-					debug_msg( "msgsnd() failed, tid=%ld, reqid=%d, handle=0x%x, state=0x%x event=%d size=%d",asm_snd_msg.instance_id,
-							asm_snd_msg.data.request_id, asm_snd_msg.data.handle, asm_snd_msg.data.sound_state, asm_snd_msg.data.sound_event, sizeof(asm_snd_msg.data) );
-					int tmpid = msgget((key_t)2014, 0666);
-					if (msgsnd(tmpid, (void *)&asm_snd_msg, sizeof(asm_snd_msg.data), 0) > 0) {
-						debug_warning("msgsnd() succeed");
-					} else {
-						debug_error("msgsnd() retry also failed");
-					}
-				}
+				__asm_notify_emergent_exit(conn, exit_pid, ASM_sound_handle[asm_index].handle, ASM_sound_handle[asm_index].sound_event,
+							   ASM_REQUEST_EMERGENT_EXIT, ASM_sound_handle[asm_index].sound_state);
 			}
 		}
 	}
@@ -2410,22 +2419,8 @@ static void __attribute__((destructor)) __ASM_fini_module(void)
 				ASM_sound_handle[asm_index].is_for_watching == false) {
 			exit_pid = ASM_sound_handle[asm_index].asm_tid;
 			if (exit_pid == asmgettid()) {
-				asm_snd_msg.instance_id = exit_pid;
-				asm_snd_msg.data.handle = ASM_sound_handle[asm_index].handle;
-				asm_snd_msg.data.request_id = ASM_REQUEST_EMERGENT_EXIT;
-				asm_snd_msg.data.sound_event = ASM_sound_handle[asm_index].sound_event;
-				asm_snd_msg.data.sound_state = ASM_sound_handle[asm_index].sound_state;
-
-				if (msgsnd(asm_snd_msgid, (void *)&asm_snd_msg, sizeof(asm_snd_msg.data), 0) < 0 ) {
-					debug_msg( "msgsnd() failed, tid=%ld, reqid=%d, handle=0x%x, state=0x%x event=%d size=%d",asm_snd_msg.instance_id,
-							asm_snd_msg.data.request_id, asm_snd_msg.data.handle, asm_snd_msg.data.sound_state, asm_snd_msg.data.sound_event, sizeof(asm_snd_msg.data) );
-					int tmpid = msgget((key_t)2014, 0666);
-					if (msgsnd(tmpid, (void *)&asm_snd_msg, sizeof(asm_snd_msg.data), 0) > 0) {
-						debug_warning("msgsnd() succeed");
-					} else {
-						debug_error("msgsnd() retry also failed");
-					}
-				}
+				__asm_notify_emergent_exit(conn, exit_pid, ASM_sound_handle[asm_index].handle, ASM_sound_handle[asm_index].sound_event,
+						       ASM_REQUEST_EMERGENT_EXIT, ASM_sound_handle[asm_index].sound_state);
 			}
 		}
 	}
