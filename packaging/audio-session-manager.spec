@@ -52,9 +52,10 @@ make %{?jobs:-j%jobs}
 
 %post
 /sbin/ldconfig
-vconftool set -t int memory/Sound/SoundStatus "0" -g 29 -f -i
+vconftool set -t int memory/Sound/SoundStatus 0 -g 29 -f -i -s system::vconf_multimedia
 
-%postun -p /sbin/ldconfig
+%postun 
+/sbin/ldconfig
 
 %files
 %manifest %{name}.manifest
