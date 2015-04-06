@@ -1,6 +1,6 @@
 Name:       audio-session-manager
 Summary:    Audio Session Manager
-Version:    0.2.6
+Version:    0.2.7
 Release:    0
 Group:      Multimedia/Service
 License:    Apache-2.0
@@ -14,7 +14,6 @@ BuildRequires:  pkgconfig(mm-common)
 BuildRequires:  pkgconfig(sysman)
 BuildRequires:  pkgconfig(vconf)
 BuildRequires:  pkgconfig(avsysaudio)
-BuildRequires:  pkgconfig(security-server)
 
 %description
 Audio Session Manager package.
@@ -44,7 +43,7 @@ cp %{SOURCE1001} .
 
 %build
 CFLAGS="%{optflags} -fvisibility=hidden -DMM_DEBUG_FLAG -DEXPORT_API=\"__attribute__((visibility(\\\"default\\\")))\"" ; export CFLAGS
-%reconfigure --disable-static --enable-security 
+%reconfigure --disable-static
 %__make %{?jobs:-j%jobs}
 
 %install
