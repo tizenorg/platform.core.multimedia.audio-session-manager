@@ -38,24 +38,6 @@ PKG_CHECK_MODULES(AVSYSAUDIO, avsysaudio)
 AC_SUBST(AVSYSAUDIO_CFLAGS)
 AC_SUBST(AVSYSAUDIO_LIBS)
 
-dnl use security --------------------------------------------------------------------------
-AC_ARG_ENABLE(security, AC_HELP_STRING([--enable-security], [using security]),
-[
- case "${enableval}" in
-	 yes) USE_SECURITY=yes ;;
-	 no)  USE_SECURITY=no ;;
-	 *)   AC_MSG_ERROR(bad value ${enableval} for --enable-security) ;;
- esac
- ],[USE_SECURITY=no])
-
-if test "x$USE_SECURITY" = "xyes"; then
-	PKG_CHECK_MODULES(SECURITY, security-server)
-	AC_SUBST(SECURITY_CFLAGS)
-	AC_SUBST(SECURITY_LIBS)
-fi
-AM_CONDITIONAL(USE_SECURITY, test "x$USE_SECURITY" = "xyes")
-dnl end --------------------------------------------------------------------
-
 
 
 # Checks for header files.

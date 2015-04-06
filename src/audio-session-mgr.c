@@ -42,10 +42,6 @@
 #include <string.h>
 #include <mm_debug.h>
 
-#ifdef USE_SECURITY
-#include <security-server.h>
-#endif
-
 #if defined(USE_VCONF)
 #include <vconf.h>
 #include <errno.h>
@@ -562,29 +558,6 @@ void __ASM_destroy_callback(int index)
 	debug_fleave();
 }
 
-#ifdef USE_SECURITY
-bool __ASM_set_cookie (unsigned char* cookie)
-{
-	int retval = -1;
-	int cookie_size = 0;
-
-	cookie_size = security_server_get_cookie_size();
-	if (cookie_size != COOKIE_SIZE) {
-		debug_error ("[Security] security_server_get_cookie_size(%d)  != COOKIE_SIZE(%d)\n", cookie_size, COOKIE_SIZE);
-		return false;
-	}
-
-	retval = security_server_request_cookie (cookie, COOKIE_SIZE);
-	if (retval == SECURITY_SERVER_API_SUCCESS) {
-		debug_msg ("[Security] security_server_request_cookie() returns [%d]\n", retval);
-		return true;
-	} else {
-		debug_error ("[Security] security_server_request_cookie() returns [%d]\n", retval);
-		return false;
-	}
-}
-#endif
-
 EXPORT_API
 bool ASM_register_sound_ex (const int application_pid, int *asm_handle, ASM_sound_events_t sound_event, ASM_sound_states_t sound_state,
 						ASM_sound_cb_t callback, void *cb_data, ASM_resource_t mm_resource, int *error_code, int (*func)(void*,void*))
@@ -659,14 +632,6 @@ bool ASM_register_sound_ex (const int application_pid, int *asm_handle, ASM_soun
 
 	handle = -1; /* for register & get handle from server */
 
-#ifdef USE_SECURITY
-	/* get cookie from security server */
-	if (__ASM_set_cookie (asm_snd_msg.data.cookie) == false) {
-		debug_error("failed to ASM_set_cookie()");
-		return false;
-	}
-#endif
-
 	/* Construct msg to send -> send msg -> recv msg */
 	if (!__asm_construct_snd_msg(asm_pid, handle, sound_event, ASM_REQUEST_REGISTER, sound_state, mm_resource, error_code)) {
 		debug_error("failed to __asm_construct_snd_msg(), error(%d)", *error_code);
@@ -690,17 +655,6 @@ bool ASM_register_sound_ex (const int application_pid, int *asm_handle, ASM_soun
 		}
 	}
 	/* Construct msg to send -> send msg -> recv msg : end */
-
-#ifdef USE_SECURITY
-	/* Check privilege first */
-	if (asm_rcv_msg.data.check_privilege == 0) {
-		debug_error("[Security] Check privilege from server Failed!!!");
-		*error_code = ERR_ASM_CHECK_PRIVILEGE_FAILED;
-		return false;
-	} else {
-		debug_msg ("[Security] Check privilege from server Success");
-	}
-#endif
 
 	handle = asm_rcv_msg.data.alloc_handle; /* get handle from server */
 	if (handle == -1) {

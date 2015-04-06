@@ -47,10 +47,6 @@
 #define ERR_ASM_VCONF_ERROR			0x21
 #define ERR_ASM_UNKNOWN_ERROR 			0x2F
 #define ERR_ASM_HANDLE_IS_FULL			0x30
-#ifdef USE_SECURITY
-#define ERR_ASM_CHECK_PRIVILEGE_FAILED		0x40
-#define COOKIE_SIZE				20
-#endif
 
 
 #define ASM_PRIORITY_MATRIX_MIN (ASM_EVENT_MAX-1)
@@ -243,9 +239,6 @@ typedef struct
 	ASM_sound_events_t			sound_event;
 	ASM_sound_states_t			sound_state;
 	ASM_resource_t				system_resource;
-#ifdef USE_SECURITY
-	unsigned char 	cookie [COOKIE_SIZE];
-#endif
 } __ASM_msg_data_lib_to_asm_t;
 
 /**
@@ -258,9 +251,6 @@ typedef struct
 	ASM_sound_commands_t			result_sound_command;
 	ASM_sound_states_t			result_sound_state;
 	ASM_sound_events_t			former_sound_event;
-#ifdef USE_SECURITY
-	int					check_privilege;
-#endif
 } __ASM_msg_data_asm_to_lib_t;
 
 /**
