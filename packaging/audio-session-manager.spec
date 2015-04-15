@@ -11,9 +11,7 @@ Requires(post): /usr/bin/vconftool
 Requires(postun): /sbin/ldconfig
 BuildRequires:  pkgconfig(glib-2.0)
 BuildRequires:  pkgconfig(mm-common)
-BuildRequires:  pkgconfig(sysman)
 BuildRequires:  pkgconfig(vconf)
-BuildRequires:  pkgconfig(avsysaudio)
 
 %description
 Audio Session Manager package.
