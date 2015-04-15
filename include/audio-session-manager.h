@@ -1,9 +1,9 @@
 /*
  * audio-session-manager
  *
- * Copyright (c) 2000 - 2011 Samsung Electronics Co., Ltd. All rights reserved.
+ * Copyright (c) 2000 - 2013 Samsung Electronics Co., Ltd. All rights reserved.
  *
- * Contact: Seungbae Shin <seungbae.shin@samsung.com>
+ * Contact: Seungbae Shin <seungbae.shin at samsung.com>, Sangchul Lee <sc11.lee at samsung.com>
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -68,7 +68,8 @@ ASM_register_sound_ex (const int application_pid, int *asm_handle, ASM_sound_eve
 bool 
 ASM_unregister_sound(const int asm_handle, ASM_sound_events_t sound_event, int *error_code);
 
-bool ASM_unregister_sound_ex(const int asm_handle, ASM_sound_events_t sound_event, int *error_code, int (*func)(void*,void*));
+bool
+ASM_unregister_sound_ex(const int asm_handle, ASM_sound_events_t sound_event, int *error_code, int (*func)(void*,void*));
 
 
 /**
@@ -109,6 +110,9 @@ ASM_get_sound_state(const int asm_handle, ASM_sound_events_t sound_event, ASM_so
 bool
 ASM_get_process_session_state(const int asm_handle, ASM_sound_states_t *sound_state, int *error_code);
 
+bool
+ASM_attach_callback(ASM_sound_events_t sound_event, ASM_sound_cb_t callback, void *user_data, int *error_code);
+
 /**
  * This function set sound state to ASM server.
  *
@@ -122,22 +126,38 @@ ASM_get_process_session_state(const int asm_handle, ASM_sound_states_t *sound_st
 bool 
 ASM_set_sound_state(const int asm_handle, ASM_sound_events_t sound_event, ASM_sound_states_t sound_state, ASM_resource_t mm_resource, int *error_code);
 
-bool ASM_set_sound_state_ex (const int asm_handle, ASM_sound_events_t sound_event, ASM_sound_states_t sound_state, ASM_resource_t mm_resource, int *error_code, int (*func)(void*,void*));
-
-/**
- * This function ask sound policy to ASM server.
- *
- * @return							No return value
- * @param[in] playing_sound			playing sound event 
- * @param[in] request_sound			request sound event
- * @param[out] sound_policy			Return sound case between playing sound and request sound
- */
-void
-ASM_ask_sound_policy(ASM_sound_events_t playing_sound, ASM_sound_events_t request_sound, ASM_sound_cases_t *sound_policy) __attribute__((deprecated)) ; 
+bool
+ASM_set_sound_state_ex (const int asm_handle, ASM_sound_events_t sound_event, ASM_sound_states_t sound_state, ASM_resource_t mm_resource, int *error_code, int (*func)(void*,void*));
 
 bool
 ASM_change_callback(const int asm_handle, ASM_sound_events_t sound_event, ASM_sound_cb_t callback, void* cb_data, int *error_code);
 
+bool
+ASM_set_watch_session (const int application_pid, ASM_sound_events_t interest_sound_event, ASM_sound_states_t interest_sound_state, ASM_watch_cb_t callback, void *user_data, int *error_code);
+
+bool
+ASM_unset_watch_session (ASM_sound_events_t interest_sound_event, ASM_sound_states_t interest_sound_state, int *error_code);
+
+bool
+ASM_reset_resumption_info(const int asm_handle, int *error_code);
+
+bool
+ASM_set_subevent (const int asm_handle, ASM_sound_sub_events_t subevent, int *error_code);
+
+bool
+ASM_get_subevent (const int asm_handle, ASM_sound_sub_events_t *subevent, int *error_code);
+
+bool
+ASM_set_subsession (const int asm_handle, ASM_sound_sub_sessions_t subsession, int resource, int *error_code);
+
+bool
+ASM_get_subsession (const int asm_handle, ASM_sound_sub_sessions_t *subsession, int *error_code);
+
+bool
+ASM_set_session_option (const int asm_handle, int option_flags, int *error_code);
+
+bool
+ASM_get_session_option (const int asm_handle, int *option_flags, int *error_code);
 
 
 #ifdef __cplusplus
