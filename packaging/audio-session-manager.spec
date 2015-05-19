@@ -1,6 +1,6 @@
 Name:       audio-session-manager
 Summary:    Audio Session Manager
-Version:    0.4.8
+Version:    0.4.10
 Release:    0
 Group:      Multimedia/Service
 License:    Apache-2.0
