@@ -1,6 +1,6 @@
 Name:       audio-session-manager
 Summary:    Audio Session Manager
-Version:    0.4.8
+Version:    0.4.10
 Release:    0
 Group:      Multimedia/Service
 License:    Apache-2.0
@@ -55,18 +55,10 @@ make %{?jobs:-j%jobs}
 /sbin/ldconfig
 vconftool set -t int memory/Sound/SoundStatus "0" -g 29 -f -i
 
-<<<<<<< HEAD
-%postun -p /sbin/ldconfig
-=======
-vconftool set -t int memory/Sound/SoundStatus 0 -g 29 -f -i -s system::vconf_multimedia
-
 %postun 
 /sbin/ldconfig
->>>>>>> 9b086fb... update vconftool for SoundStatus initialize
 
 %files
-%manifest %{name}.manifest
-%license LICENSE
 %defattr(-,root,root,-)
 %{_libdir}/libaudio-session-mgr.so.*
 %{_bindir}/asm_testsuite
