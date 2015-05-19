@@ -20,7 +20,17 @@ asm_callback (int handle, ASM_event_sources_t event_src, ASM_sound_commands_t co
 {
 	g_print ("\n[%s] handle = %d, event src = %d, command = %d, sound_state = %d, cb_data = %p\n\n",
 						__func__, handle, event_src, command, sound_status, cb_data);
-	return ASM_CB_RES_NONE;
+	switch (command) {
+	case ASM_COMMAND_PLAY:
+	case ASM_COMMAND_RESUME:
+		return ASM_CB_RES_PLAYING;
+	case ASM_COMMAND_STOP:
+		return ASM_CB_RES_STOP;
+	case ASM_COMMAND_PAUSE:
+		return ASM_CB_RES_PAUSE;
+	default:
+		return ASM_CB_RES_NONE;
+	}
 }
 
 ASM_cb_result_t
