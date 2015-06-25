@@ -42,6 +42,14 @@
 #include <string.h>
 #include <mm_debug.h>
 
+#include <gio/gio.h>
+#include <unistd.h>
+
+#ifdef USE_SECURITY
+#include <security-server.h>
+#define COOKIE_SIZE 20
+#endif
+
 #if defined(USE_VCONF)
 #include <vconf.h>
 #include <errno.h>
@@ -238,7 +246,8 @@ static gboolean asm_callback_handler( gpointer d)
 		tid = ASM_sound_handle[asm_index].asm_tid;
 
 		if (rcv_command) {
-			debug_msg("Got and start CB : TID(%d), handle(%d), command(%d,(PLAY(2)/STOP(3)/PAUSE(4)/RESUME(5)), event_src(%d)", tid, handle, rcv_command, event_src );
+			debug_msg("Got and start CB : TID(%d), handle(%d), command(%d,(PLAY(2)/STOP(3)/PAUSE(4)/RESUME(5)), event_src(%d)",
+					tid, handle, rcv_command, event_src );
 			if (!__ASM_get_sound_state(&sound_status_value, &error_code)) {
 				debug_error("failed to __ASM_get_sound_state(), error(%d)", error_code);
 			}
@@ -717,49 +726,9 @@ static bool __asm_construct_snd_msg(int asm_pid, int handle, ASM_sound_events_t 
 	asm_snd_msg.data.sound_state = sound_state;
 	asm_snd_msg.data.system_resource = resource;
 
-	debug_msg("tid=%ld,handle=%d,req=%d,evt=%d,state=%d,resource=%d,instance_id=%ld", asm_snd_msg.instance_id, asm_snd_msg.data.handle,
-				asm_snd_msg.data.request_id, asm_snd_msg.data.sound_event, asm_snd_msg.data.sound_state, asm_snd_msg.data.system_resource, asm_snd_msg.instance_id);
-
-	return true;
-}
-
-
-static bool __ASM_init_msg(int *error_code)
-{
-	int i = 0;
-	asm_snd_msgid = msgget((key_t)2014, 0666);
-	asm_rcv_msgid = msgget((key_t)4102, 0666);
-	asm_cb_msgid = msgget((key_t)4103, 0666);
-
-	debug_msg("snd_msqid(%#X), rcv_msqid(%#X), cb_msqid(%#X)\n", asm_snd_msgid, asm_rcv_msgid, asm_cb_msgid);
-
-	if (asm_snd_msgid == -1 || asm_rcv_msgid == -1 || asm_cb_msgid == -1 ) {
-		if (errno == EACCES) {
-			debug_warning("Require ROOT permission.\n");
-		} else if (errno == ENOMEM) {
-			debug_warning("System memory is empty.\n");
-		} else if(errno == ENOSPC) {
-			debug_warning("Resource is empty.\n");
-		}
-		/* try again in 50ms later by 10 times */
-		for (i=0;i<10;i++) {
-			usleep(50000);
-			asm_snd_msgid = msgget((key_t)2014, 0666);
-			asm_rcv_msgid = msgget((key_t)4102, 0666);
-			asm_cb_msgid = msgget((key_t)4103, 0666);
-			if (asm_snd_msgid == -1 || asm_rcv_msgid == -1 || asm_cb_msgid == -1) {
-				debug_error("Fail to GET msgid by retrying %d times\n", i+1);
-			} else {
-				break;
-			}
-		}
-
-		if (asm_snd_msgid == -1 || asm_rcv_msgid == -1 || asm_cb_msgid == -1) {
-			*error_code = ERR_ASM_MSG_QUEUE_MSGID_GET_FAILED;
-			debug_error("failed to msgget with error(%d)",*error_code);
-			return false;
-		}
-	}
+	debug_msg("tid=%ld,handle=%d,req=%d,evt=%d,state=%d,resource=%d,instance_id=%ld", asm_snd_msg.instance_id,
+				asm_snd_msg.data.handle, asm_snd_msg.data.request_id, asm_snd_msg.data.sound_event,
+				asm_snd_msg.data.sound_state, asm_snd_msg.data.system_resource, asm_snd_msg.instance_id);
 
 	return true;
 }
@@ -781,6 +750,52 @@ static void __ASM_destroy_callback(int index)
 	debug_fleave();
 }
 
+#ifdef SUPPORT_CONTAINER
+#ifdef USE_SECURITY
+char* _get_cookie(int cookie_size)
+{
+	int retval = -1;
+	char* cookie = NULL;
+
+	if (security_server_get_cookie_size() != cookie_size) {
+		debug_error ("[Security] security_server_get_cookie_size() != COOKIE_SIZE(%d)\n", cookie_size);
+		return false;
+	}
+
+	cookie = (char*)malloc (cookie_size);
+
+	retval = security_server_request_cookie (cookie, cookie_size);
+	if (retval == SECURITY_SERVER_API_SUCCESS) {
+		debug_msg ("[Security] security_server_request_cookie() returns [%d]\n", retval);
+	} else {
+		debug_error ("[Security] security_server_request_cookie() returns [%d]\n", retval);
+	}
+
+	return cookie;
+}
+
+static GVariant* _get_cookie_variant ()
+{
+	int i;
+	GVariantBuilder builder;
+	char* cookie = NULL;
+
+	cookie = _get_cookie(COOKIE_SIZE);
+
+	if (cookie == NULL)
+		return NULL;
+
+	g_variant_builder_init(&builder, G_VARIANT_TYPE_ARRAY);
+	for (i = 0; i < COOKIE_SIZE; i++)
+		g_variant_builder_add(&builder, "y", cookie[i]);
+
+	free (cookie);
+	return g_variant_builder_end(&builder);
+}
+
+#endif /* USE_SECURITY */
+#endif /* SUPPORT_CONTAINER */
+
 EXPORT_API
 bool ASM_register_sound_ex (const int application_pid, int *asm_handle, ASM_sound_events_t sound_event, ASM_sound_states_t sound_state,
 						ASM_sound_cb_t callback, void *user_data, ASM_resource_t mm_resource, int *error_code, int (*func)(void*,void*))
@@ -789,7 +804,13 @@ bool ASM_register_sound_ex (const int application_pid, int *asm_handle, ASM_soun
 	int handle = 0;
 	int asm_pid = 0;
 	int index = 0;
-	int ret = 0;
+	GError *err = NULL;
+	GDBusConnection *conn = NULL;
+	GVariant *res_variant = NULL;
+	GVariant *client_variant = NULL;
+#ifdef SUPPORT_CONTAINER
+	char container[128];
+#endif
 
 	debug_fenter();
 
@@ -842,50 +863,62 @@ bool ASM_register_sound_ex (const int application_pid, int *asm_handle, ASM_soun
 	ASM_sound_handle[index].sound_event = sound_event;
 	ASM_sound_handle[index].asm_tid = asm_pid;
 
-	if (!__ASM_init_msg(error_code)) {
-		debug_error("failed to __ASM_init_msg(), error(%d)", *error_code);
-		return false;
-	}
-
 	if (!__ASM_get_sound_state(&sound_status_value, error_code)) {
 		debug_error("failed to __ASM_get_sound_state(), error(%d)", *error_code);
 		return false;
 	}
 
-	debug_msg(" <<<< Event(%s), Tid(%d), Index(%d), State(%s)", ASM_sound_events_str[sound_event], ASM_sound_handle[index].asm_tid, index, ASM_sound_state_str[sound_state]);
+	debug_error(" <<<< Event(%s), Tid(%d), Index(%d), State(%s)",
+				ASM_sound_events_str[sound_event], ASM_sound_handle[index].asm_tid, index, ASM_sound_state_str[sound_state]);
 
 	handle = -1; /* for register & get handle from server */
 
-	/* Construct msg to send -> send msg -> recv msg */
-	if (!__asm_construct_snd_msg(asm_pid, handle, sound_event, ASM_REQUEST_REGISTER, sound_state, mm_resource, error_code)) {
-		debug_error("failed to __asm_construct_snd_msg(), error(%d)", *error_code);
-		return false;
-	}
-
 	if (func) {
+		/* Construct msg to send -> send msg -> recv msg */
+		if (!__asm_construct_snd_msg(asm_pid, handle, sound_event, ASM_REQUEST_REGISTER, sound_state, mm_resource, error_code)) {
+			debug_error("failed to __asm_construct_snd_msg(), error(%d)", *error_code);
+			return false;
+		}
 		func ((void*)&asm_snd_msg, (void*)&asm_rcv_msg);
 	} else	{
-		NO_EINTR(ret = msgsnd(asm_snd_msgid, (void *)&asm_snd_msg, sizeof(asm_snd_msg.data), 0));
-		if (ret == -1) {
-			*error_code = ERR_ASM_MSG_QUEUE_SND_ERROR;
-			debug_error("failed to msgsnd(%d,%s)", errno, strerror(errno));
+		conn = g_bus_get_sync(G_BUS_TYPE_SYSTEM, NULL, &err);
+		if (!conn && err) {
+			debug_error ("g_bus_get_sync() error (%s) ", err->message);
+			g_error_free (err);
 			return false;
 		}
+		debug_error ("conn = %p", conn);
 
-		NO_EINTR(ret = msgrcv(asm_rcv_msgid, (void *)&asm_rcv_msg, sizeof(asm_rcv_msg.data), ASM_sound_handle[index].asm_tid, 0));
-		if (ret == -1) {
-			*error_code = ERR_ASM_MSG_QUEUE_RCV_ERROR;
-			debug_error("failed to msgrcv(%d,%s)", errno, strerror(errno));
-			return false;
-		}
+#ifdef SUPPORT_CONTAINER
+#ifdef USE_SECURITY
+		client_variant = g_variant_new("(@ayiiiiii)", _get_cookie_variant(), asm_pid, handle, sound_event,
+										ASM_REQUEST_REGISTER, sound_state, mm_resource);
+#else /* USE_SECURITY */
+		gethostname(container, sizeof(container));
+		debug_error ("container = %s", container);
+		client_variant = g_variant_new("(siiiiii)", container, asm_pid, handle, sound_event,
+										ASM_REQUEST_REGISTER, sound_state, mm_resource);
+#endif /* USE_SECURITY */
 
-		if (asm_rcv_msg.data.source_request_id != ASM_REQUEST_REGISTER) {
-			*error_code = ERR_ASM_MSG_QUEUE_RCV_ERROR;
-			debug_error("received msg is not valid, source_request_id(%d)", asm_rcv_msg.data.source_request_id);
+#else /* SUPPORT_CONTAINER */
+		client_variant = g_variant_new("(iiiiii)", asm_pid, handle, sound_event,
+										ASM_REQUEST_REGISTER, sound_state, mm_resource);
+#endif /* SUPPORT_CONTAINER */
+
+		res_variant = g_dbus_connection_call_sync(conn, ASM_BUS_NAME_SOUND_SERVER, ASM_OBJECT_SOUND_SERVER, ASM_INTERFACE_SOUND_SERVER,
+										"ASMRegisterSound", client_variant, NULL, G_DBUS_CALL_FLAGS_NONE, -1, NULL,  &err);
+		if (!res_variant && err) {
+			debug_error("g_dbus_connection_call_sync fail(%s)", err->message);
+			*error_code = ERR_ASM_GDBUS_CONNECTION_ERROR;
+			g_error_free (err);
 			return false;
+		} else {
+			g_variant_get(res_variant ,"(iiiiii)",
+					&(asm_rcv_msg.instance_id), &(asm_rcv_msg.data.alloc_handle), &(asm_rcv_msg.data.cmd_handle),
+					&(asm_rcv_msg.data.source_request_id), &(asm_rcv_msg.data.result_sound_command),
+					&(asm_rcv_msg.data.result_sound_state));
 		}
 	}
-	/* Construct msg to send -> send msg -> recv msg : end */
 
 	handle = asm_rcv_msg.data.alloc_handle; /* get handle from server */
 	if (handle == -1) {
@@ -931,13 +964,16 @@ bool ASM_register_sound_ex (const int application_pid, int *asm_handle, ASM_soun
 				debug_error("failed to __ASM_get_sound_state(), error(%d)", *error_code);
 			}
 
-			debug_msg("Callback : TID(%ld), handle(%d), command(%d)", asm_rcv_msg.instance_id, asm_rcv_msg.data.cmd_handle, asm_rcv_msg.data.result_sound_command);
+			debug_msg("Callback : TID(%ld), handle(%d), command(%d)",
+					asm_rcv_msg.instance_id, asm_rcv_msg.data.cmd_handle, asm_rcv_msg.data.result_sound_command);
 			action_index = __ASM_find_index_by_handle(asm_rcv_msg.data.cmd_handle);
 			if (action_index == -1) {
 				debug_error("Can not find index of instance %ld, handle %d", asm_rcv_msg.instance_id, asm_rcv_msg.data.cmd_handle);
 			} else {
-				if (ASM_sound_handle[action_index].asm_callback!=NULL) {
-					ASM_sound_handle[action_index].asm_callback(asm_rcv_msg.data.cmd_handle, ASM_sound_handle[action_index].sound_event, asm_rcv_msg.data.result_sound_command, rcv_sound_status_value, ASM_sound_handle[action_index].user_data);
+				if (ASM_sound_handle[action_index].asm_callback != NULL) {
+					ASM_sound_handle[action_index].asm_callback(asm_rcv_msg.data.cmd_handle, ASM_sound_handle[action_index].sound_event,
+																asm_rcv_msg.data.result_sound_command, rcv_sound_status_value,
+																ASM_sound_handle[action_index].user_data);
 				} else {
 					debug_msg("null callback");
 				}
@@ -960,7 +996,7 @@ bool ASM_register_sound_ex (const int application_pid, int *asm_handle, ASM_soun
 	ASM_sound_handle[index].user_data = user_data;
 	ASM_sound_handle[index].is_used = true;
 
-	debug_msg(" >>>> Event(%s), Handle(%d), CBFuncPtr(%p)", ASM_sound_events_str[sound_event], handle, callback);
+	debug_error(" >>>> Event(%s), Handle(%d), CBFuncPtr(%p)", ASM_sound_events_str[sound_event], handle, callback);
 	/* Add [out] param, asm_handle */
 	*asm_handle = handle;
 
@@ -1024,7 +1060,9 @@ bool ASM_unregister_sound_ex(const int asm_handle, ASM_sound_events_t sound_even
 {
 	int handle=0;
 	int asm_index = -1;
-	int ret = 0;
+	GError *err = NULL;
+	GDBusConnection *conn = NULL;
+	GVariant *client_variant = NULL;
 
 	debug_fenter();
 
@@ -1054,12 +1092,10 @@ bool ASM_unregister_sound_ex(const int asm_handle, ASM_sound_events_t sound_even
 		return false;
 	}
 	debug_msg("<<<< Event(%s), Tid(%d), Handle(%d) Index(%d)",
-				ASM_sound_events_str[sound_event], ASM_sound_handle[asm_index].asm_tid, ASM_sound_handle[asm_index].handle, asm_index);
-
-	if (!__asm_construct_snd_msg(ASM_sound_handle[asm_index].asm_tid, handle, sound_event, ASM_REQUEST_UNREGISTER, ASM_STATE_NONE, ASM_RESOURCE_NONE, error_code)) {
-		debug_error("failed to __asm_construct_snd_msg(), error(%d)", *error_code);
-		return false;
-	}
+				ASM_sound_events_str[sound_event],
+				ASM_sound_handle[asm_index].asm_tid,
+				ASM_sound_handle[asm_index].handle,
+				asm_index);
 
 	if (ASM_sound_handle[asm_index].asm_lock) {
 		if (!g_mutex_trylock(ASM_sound_handle[asm_index].asm_lock)) {
@@ -1072,15 +1108,30 @@ bool ASM_unregister_sound_ex(const int asm_handle, ASM_sound_events_t sound_even
 	}
 
 	if (func) {
+		/* Construct msg to send -> send msg -> recv msg */
+		if (!__asm_construct_snd_msg(ASM_sound_handle[asm_index].asm_tid, handle, sound_event,
+									ASM_REQUEST_UNREGISTER, ASM_STATE_NONE, ASM_RESOURCE_NONE, error_code)) {
+			debug_error("failed to __asm_construct_snd_msg(), error(%d)", *error_code);
+			return false;
+		}
 		func(&asm_snd_msg, &asm_rcv_msg);
 	} else  {
-		NO_EINTR(ret = msgsnd(asm_snd_msgid, (void *)&asm_snd_msg, sizeof(asm_snd_msg.data), 0));
-		if (ret == -1) {
-			*error_code = ERR_ASM_MSG_QUEUE_SND_ERROR;
-			debug_error("failed to msgsnd(%d,%s)", errno, strerror(errno));
-			if (ASM_sound_handle[asm_index].asm_lock) {
-				g_mutex_unlock(ASM_sound_handle[asm_index].asm_lock);
-			}
+		conn = g_bus_get_sync(G_BUS_TYPE_SYSTEM, NULL, &err);
+		if (!conn && err) {
+			debug_error ("g_bus_get_sync() error (%s) ", err->message);
+			g_error_free (err);
+			return false;
+		}
+
+		client_variant = g_variant_new("(iiiiii)",ASM_sound_handle[asm_index].asm_tid, handle, sound_event,
+								ASM_REQUEST_UNREGISTER, ASM_STATE_NONE, ASM_RESOURCE_NONE);
+		g_dbus_connection_call_sync(conn, ASM_BUS_NAME_SOUND_SERVER, ASM_OBJECT_SOUND_SERVER, ASM_INTERFACE_SOUND_SERVER,
+								"ASMUnregisterSound", client_variant, NULL, G_DBUS_CALL_FLAGS_NONE, -1, NULL,  &err);
+
+		if(err) {
+			debug_error("g_dbus_connection_call_sync fail(%s)", err->message);
+			*error_code = ERR_ASM_GDBUS_CONNECTION_ERROR;
+			g_error_free (err);
 			return false;
 		}
 	}
@@ -1117,7 +1168,13 @@ bool ASM_set_watch_session (const int application_pid,	ASM_sound_events_t intere
 	int handle = 0;
 	int asm_pid = 0;
 	int index = 0;
-	int ret = 0;
+	GError *err = NULL;
+	GDBusConnection *conn = NULL;
+	GVariant *res_variant = NULL;
+	GVariant *client_variant = NULL;
+#ifdef SUPPORT_CONTAINER
+	char container[128];
+#endif
 
 	debug_fenter();
 
@@ -1173,12 +1230,9 @@ bool ASM_set_watch_session (const int application_pid,	ASM_sound_events_t intere
 	ASM_sound_handle[index].sound_state = interest_sound_state;
 
 	debug_msg(" <<<< Interest event(%s), state(%s), Tid(%d), Index(%d)",
-				ASM_sound_events_str[interest_sound_event], ASM_sound_state_str[interest_sound_state], ASM_sound_handle[index].asm_tid, index);
-
-	if (!__ASM_init_msg(error_code)) {
-		debug_error("failed to __ASM_init_msg(), error(%d)", *error_code);
-		return false;
-	}
+				ASM_sound_events_str[interest_sound_event],
+				ASM_sound_state_str[interest_sound_state],
+				ASM_sound_handle[index].asm_tid, index);
 
 	if (!__ASM_get_sound_state(&sound_status_value, error_code)) {
 		debug_error("failed to __ASM_get_sound_state(), error(%d)", *error_code);
@@ -1186,32 +1240,41 @@ bool ASM_set_watch_session (const int application_pid,	ASM_sound_events_t intere
 	}
 
 	handle = -1; /* for register & get handle from server */
-
-	/* Construct msg to send -> send msg -> recv msg */
-	if (!__asm_construct_snd_msg(asm_pid, handle, interest_sound_event, ASM_REQUEST_REGISTER_WATCHER, interest_sound_state, ASM_RESOURCE_NONE, error_code)) {
-		debug_error("failed to __asm_construct_snd_msg(), error(%d)", *error_code);
+	conn = g_bus_get_sync(G_BUS_TYPE_SYSTEM, NULL, &err);
+	if (!conn && err) {
+		debug_error ("g_bus_get_sync() error (%s) ", err->message);
+		g_error_free (err);
 		return false;
 	}
 
-	NO_EINTR(ret = msgsnd(asm_snd_msgid, (void *)&asm_snd_msg, sizeof(asm_snd_msg.data), 0));
-	if (ret == -1) {
-		*error_code = ERR_ASM_MSG_QUEUE_SND_ERROR;
-		debug_error("failed to msgsnd(%d,%s)", errno, strerror(errno));
-		return false;
-	}
+#ifdef SUPPORT_CONTAINER
+#ifdef USE_SECURITY
+	client_variant = g_variant_new("(@ayiiiiii)", _get_cookie_variant(), asm_pid, handle, interest_sound_event,
+									ASM_REQUEST_REGISTER_WATCHER, interest_sound_state, ASM_RESOURCE_NONE);
+#else /* USE_SECURITY */
+	gethostname(container, sizeof(container));
+	debug_error ("container = %s", container);
+	client_variant = g_variant_new("(siiiiii)", container, asm_pid, handle, interest_sound_event,
+									ASM_REQUEST_REGISTER_WATCHER, interest_sound_state, ASM_RESOURCE_NONE);
+#endif /* USE_SECURITY */
 
-	NO_EINTR(ret = msgrcv(asm_rcv_msgid, (void *)&asm_rcv_msg, sizeof(asm_rcv_msg.data), ASM_sound_handle[index].asm_tid, 0));
-	if (ret == -1) {
-		*error_code = ERR_ASM_MSG_QUEUE_RCV_ERROR;
-		debug_error("failed to msgrcv(%d,%s)", errno, strerror(errno));
+#else /* SUPPORT_CONTAINER */
+	client_variant = g_variant_new("(iiiiii)", asm_pid, handle, interest_sound_event,
+									ASM_REQUEST_REGISTER_WATCHER, interest_sound_state, ASM_RESOURCE_NONE);
+#endif /* SUPPORT_CONTAINER */
+
+	res_variant = g_dbus_connection_call_sync(conn, ASM_BUS_NAME_SOUND_SERVER, ASM_OBJECT_SOUND_SERVER, ASM_INTERFACE_SOUND_SERVER,
+									"ASMRegisterWatcher", client_variant, NULL, G_DBUS_CALL_FLAGS_NONE, -1, NULL,  &err);
+
+	if(!res_variant && err) {
+		debug_error("g_dbus_connection_call_sync fail(%s)", err->message);
+		*error_code = ERR_ASM_GDBUS_CONNECTION_ERROR;
+		g_error_free (err);
 		return false;
+	} else {		
+		g_variant_get(res_variant ,"(iiiiii)", &(asm_rcv_msg.instance_id), &(asm_rcv_msg.data.alloc_handle), &(asm_rcv_msg.data.cmd_handle),
+					&(asm_rcv_msg.data.source_request_id), &(asm_rcv_msg.data.result_sound_command), &(asm_rcv_msg.data.result_sound_state));
 	}
-	if (asm_rcv_msg.data.source_request_id != ASM_REQUEST_REGISTER_WATCHER) {
-		*error_code = ERR_ASM_MSG_QUEUE_RCV_ERROR;
-		debug_error("received msg is not valid, source_request_id(%d)", asm_rcv_msg.data.source_request_id);
-		return false;
-	}
-	/* Construct msg to send -> send msg -> recv msg : end */
 
 	handle = asm_rcv_msg.data.alloc_handle; /* get handle from server */
 	if (handle == -1) {
@@ -1236,7 +1299,7 @@ bool ASM_set_watch_session (const int application_pid,	ASM_sound_events_t intere
 
 	default:
 		debug_error("received message is abnormal..result_sound_command(%d) from ASM server", asm_rcv_msg.data.result_sound_command);
-		*error_code = ERR_ASM_MSG_QUEUE_RCV_ERROR;
+		*error_code = ERR_ASM_GDBUS_CONNECTION_ERROR;
 		return false;
 	}
 	/********************************************************************************************************/
@@ -1253,7 +1316,9 @@ bool ASM_unset_watch_session (ASM_sound_events_t interest_sound_event, ASM_sound
 	int handle = 0;
 	int asm_pid = 0;
 	int index = 0;
-	int ret = 0;
+	GError *err = NULL;
+	GDBusConnection *conn = NULL;
+	GVariant *client_variant = NULL;
 
 	debug_fenter();
 
@@ -1283,12 +1348,9 @@ bool ASM_unset_watch_session (ASM_sound_events_t interest_sound_event, ASM_sound
 	}
 
 	debug_msg(" <<<< Unregister interest event(%s), state(%s), Tid(%d), Index(%d)",
-				ASM_sound_events_str[ASM_sound_handle[index].sound_event], ASM_sound_state_str[ASM_sound_handle[index].sound_state], ASM_sound_handle[index].asm_tid, index);
-
-	if (!__ASM_init_msg(error_code)) {
-		debug_error("failed to __ASM_init_msg(), error(%d)", *error_code);
-		return false;
-	}
+				ASM_sound_events_str[ASM_sound_handle[index].sound_event],
+				ASM_sound_state_str[ASM_sound_handle[index].sound_state],
+				ASM_sound_handle[index].asm_tid, index);
 
 	if (!__ASM_get_sound_state(&sound_status_value, error_code)) {
 		debug_error("failed to __ASM_get_sound_state(), error(%d)", *error_code);
@@ -1298,26 +1360,28 @@ bool ASM_unset_watch_session (ASM_sound_events_t interest_sound_event, ASM_sound
 	handle = ASM_sound_handle[index].handle;
 	asm_pid = ASM_sound_handle[index].asm_tid;
 
-	/* Construct msg to send -> send msg */
-	if (!__asm_construct_snd_msg(asm_pid, handle, interest_sound_event, ASM_REQUEST_UNREGISTER_WATCHER, interest_sound_state, ASM_RESOURCE_NONE, error_code)) {
-		debug_error("failed to __asm_construct_snd_msg(), error(%d)", *error_code);
-		return false;
-	}
-
 	if (ASM_sound_handle[index].asm_lock) {
 		g_mutex_lock(ASM_sound_handle[index].asm_lock);
 	}
 
-	NO_EINTR(ret = msgsnd(asm_snd_msgid, (void *)&asm_snd_msg, sizeof(asm_snd_msg.data), 0));
-	if (ret == -1) {
-		*error_code = ERR_ASM_MSG_QUEUE_SND_ERROR;
-		debug_error("failed to msgsnd(%d,%s)", errno, strerror(errno));
-		if (ASM_sound_handle[index].asm_lock) {
-			g_mutex_unlock(ASM_sound_handle[index].asm_lock);
-		}
+	conn = g_bus_get_sync(G_BUS_TYPE_SYSTEM, NULL, &err);
+	if (!conn && err) {
+		debug_error ("g_bus_get_sync() error (%s) ", err->message);
+		g_error_free (err);
 		return false;
 	}
-	/* Construct msg to send -> send msg : end */
+
+	client_variant = g_variant_new("(iiiiii)", asm_pid, handle, interest_sound_event,
+								ASM_REQUEST_UNREGISTER_WATCHER, interest_sound_state, ASM_RESOURCE_NONE);
+	g_dbus_connection_call_sync(conn, ASM_BUS_NAME_SOUND_SERVER, ASM_OBJECT_SOUND_SERVER, ASM_INTERFACE_SOUND_SERVER,
+								"ASMUnregisterWatcher", client_variant, NULL, G_DBUS_CALL_FLAGS_NONE, -1, NULL,  &err);
+
+	if(err) {
+		debug_error("g_dbus_connection_call_sync fail(%s)", err->message);
+		*error_code = ERR_ASM_GDBUS_CONNECTION_ERROR;
+		g_error_free (err);
+		return false;
+	}
 
 	if (ASM_sound_handle[index].asm_lock) {
 		g_mutex_unlock(ASM_sound_handle[index].asm_lock);
@@ -1364,7 +1428,10 @@ bool ASM_get_process_session_state(const int asm_handle, ASM_sound_states_t *sou
 {
 	int handle = 0;
 	int asm_index = 0;
-	int ret = 0;
+	GError *err = NULL;
+	GDBusConnection *conn = NULL;
+	GVariant *res_variant = NULL;
+	GVariant *client_variant = NULL;
 
 	if (sound_state == NULL || error_code == NULL) {
 		if (error_code)
@@ -1383,36 +1450,31 @@ bool ASM_get_process_session_state(const int asm_handle, ASM_sound_states_t *sou
 
 	debug_msg("Pid(%d)", ASM_sound_handle[asm_index].asm_tid);
 
-	if (!__asm_construct_snd_msg(ASM_sound_handle[asm_index].asm_tid, handle, ASM_EVENT_MONITOR, ASM_REQUEST_GETMYSTATE, ASM_STATE_NONE, ASM_RESOURCE_NONE, error_code)) {
-		debug_error("failed to __asm_construct_snd_msg(), error(%d)", *error_code);
+	conn = g_bus_get_sync(G_BUS_TYPE_SYSTEM, NULL, &err);
+	if (!conn && err) {
+		debug_error ("g_bus_get_sync() error (%s) ", err->message);
+		g_error_free (err);
 		return false;
 	}
 
+	client_variant = g_variant_new("(iiiiii)", ASM_sound_handle[asm_index].asm_tid, handle, ASM_EVENT_MONITOR,
+									ASM_REQUEST_GETMYSTATE, ASM_STATE_NONE, ASM_RESOURCE_NONE);
+	res_variant = g_dbus_connection_call_sync(conn, ASM_BUS_NAME_SOUND_SERVER, ASM_OBJECT_SOUND_SERVER, ASM_INTERFACE_SOUND_SERVER,
+									"ASMGetMyState", client_variant, NULL, G_DBUS_CALL_FLAGS_NONE, -1, NULL, &err);
 
-	NO_EINTR(ret = msgsnd(asm_snd_msgid, (void *)&asm_snd_msg, sizeof(asm_snd_msg.data), 0));
-	if (ret == -1) {
-		*error_code = ERR_ASM_MSG_QUEUE_SND_ERROR;
-		debug_error("failed to msgsnd(%d,%s)", errno, strerror(errno));
+	if(!res_variant && err) {
+		debug_error("g_dbus_connection_call_sync fail(%s)", err->message);
+		*error_code = ERR_ASM_GDBUS_CONNECTION_ERROR;
+		g_error_free (err);
 		return false;
-	}
-
-	NO_EINTR(ret = msgrcv(asm_rcv_msgid, (void *)&asm_rcv_msg, sizeof(asm_rcv_msg.data), ASM_sound_handle[asm_index].asm_tid, 0));
-	if (ret == -1) {
-		*error_code = ERR_ASM_MSG_QUEUE_RCV_ERROR;
-		debug_error("failed to msgrcv(%d,%s)", errno, strerror(errno));
-		return false;
-	}
-
-	if (asm_rcv_msg.data.source_request_id != ASM_REQUEST_GETMYSTATE) {
-		*error_code = ERR_ASM_MSG_QUEUE_RCV_ERROR;
-		debug_error("received msg is not valid, source_request_id(%d)", asm_rcv_msg.data.source_request_id);
-		return false;
+	} else {
+		g_variant_get(res_variant ,"(iiiii)", &(asm_rcv_msg.instance_id), &(asm_rcv_msg.data.alloc_handle),
+				&(asm_rcv_msg.data.cmd_handle), &(asm_rcv_msg.data.source_request_id), &(asm_rcv_msg.data.result_sound_state));
 	}
 
 	*sound_state = asm_rcv_msg.data.result_sound_state;
 
 	debug_msg(">>>> Pid(%d), State(%s)", ASM_sound_handle[asm_index].asm_tid, ASM_sound_state_str[*sound_state]);
-
 
 	return true;
 }
@@ -1456,7 +1518,10 @@ bool ASM_get_sound_state(const int asm_handle, ASM_sound_events_t sound_event, A
 {
 	int handle = 0;
 	int asm_index = 0;
-	int ret = 0;
+	GError *err = NULL;
+	GDBusConnection *conn = NULL;
+	GVariant *res_variant = NULL;
+	GVariant *client_variant = NULL;
 
 	if (sound_state == NULL || error_code == NULL) {
 		if (error_code)
@@ -1479,35 +1544,30 @@ bool ASM_get_sound_state(const int asm_handle, ASM_sound_events_t sound_event, A
 	debug_msg("<<<< Event(%s), Tid(%d), handle(%d)",
 			ASM_sound_events_str[sound_event], ASM_sound_handle[asm_index].asm_tid, ASM_sound_handle[asm_index].handle);
 
-	if (!__asm_construct_snd_msg(ASM_sound_handle[asm_index].asm_tid, handle, sound_event, ASM_REQUEST_GETSTATE, ASM_STATE_NONE, ASM_RESOURCE_NONE, error_code)) {
-		debug_error("failed to __asm_construct_snd_msg(), error(%d)", *error_code);
+	conn = g_bus_get_sync(G_BUS_TYPE_SYSTEM, NULL, &err);
+	if (!conn && err) {
+		debug_error ("g_bus_get_sync() error (%s) ", err->message);
+		g_error_free (err);
 		return false;
 	}
 
-	NO_EINTR(ret = msgsnd(asm_snd_msgid, (void *)&asm_snd_msg, sizeof(asm_snd_msg.data), 0));
-	if (ret == -1) {
-		*error_code = ERR_ASM_MSG_QUEUE_SND_ERROR;
-		debug_error("failed to msgsnd(%d,%s)", errno, strerror(errno));
-		return false;
-	}
+	client_variant = g_variant_new("(iiiiii)", ASM_sound_handle[asm_index].asm_tid, handle, sound_event,
+								ASM_REQUEST_GETSTATE, ASM_STATE_NONE, ASM_RESOURCE_NONE);
+	res_variant = g_dbus_connection_call_sync(conn, ASM_BUS_NAME_SOUND_SERVER, ASM_OBJECT_SOUND_SERVER, ASM_INTERFACE_SOUND_SERVER,
+								"ASMGetState", client_variant, NULL, G_DBUS_CALL_FLAGS_NONE, -1, NULL, &err);
 
-	NO_EINTR(ret = msgrcv(asm_rcv_msgid, (void *)&asm_rcv_msg, sizeof(asm_rcv_msg.data), ASM_sound_handle[asm_index].asm_tid, 0));
-	if (ret == -1) {
-		*error_code = ERR_ASM_MSG_QUEUE_RCV_ERROR;
-		debug_error("failed to msgrcv(%d,%s)", errno, strerror(errno));
+	if(!res_variant && err) {
+		debug_error("g_dbus_connection_call_sync fail(%s)", err->message);
+		*error_code = ERR_ASM_GDBUS_CONNECTION_ERROR;
+		g_error_free (err);
 		return false;
-	}
-
-	if (asm_rcv_msg.data.source_request_id != ASM_REQUEST_GETSTATE) {
-		*error_code = ERR_ASM_MSG_QUEUE_RCV_ERROR;
-		debug_error("received msg is not valid, source_request_id(%d)", asm_rcv_msg.data.source_request_id);
-		return false;
+	} else {		
+		g_variant_get(res_variant ,"(iiiii)", &(asm_rcv_msg.instance_id), &(asm_rcv_msg.data.alloc_handle), &(asm_rcv_msg.data.cmd_handle), &(asm_rcv_msg.data.source_request_id), &(asm_rcv_msg.data.result_sound_state));
 	}
 
 	*sound_state = asm_rcv_msg.data.result_sound_state;
 
 	debug_msg(">>>> Event(%s), State(%s)", ASM_sound_events_str[sound_event], ASM_sound_state_str[*sound_state]);
-
 
 	return true;
 }
@@ -1517,7 +1577,10 @@ bool ASM_set_sound_state_ex (const int asm_handle, ASM_sound_events_t sound_even
 {
 	int handle = 0;
 	int asm_index = 0;
-	int ret = 0;
+	GError *err = NULL;
+	GDBusConnection *conn = NULL;
+	GVariant *res_variant = NULL;
+	GVariant *client_variant = NULL;
 
 	debug_fenter();
 
@@ -1549,41 +1612,43 @@ bool ASM_set_sound_state_ex (const int asm_handle, ASM_sound_events_t sound_even
 	debug_msg("<<<< Event(%s), State(%s), Tid(%d), handle(%d)",
 				ASM_sound_events_str[sound_event], ASM_sound_state_str[sound_state], ASM_sound_handle[asm_index].asm_tid, ASM_sound_handle[asm_index].handle);
 
-	if (!__asm_construct_snd_msg(ASM_sound_handle[asm_index].asm_tid, ASM_sound_handle[asm_index].handle, sound_event, ASM_REQUEST_SETSTATE, sound_state, mm_resource, error_code)) {
-		debug_error("failed to __asm_construct_snd_msg(), error(%d)", *error_code);
-		return false;
-	}
-
 	if (func) {
+		/* Construct msg to send -> send msg -> recv msg */
+		if (!__asm_construct_snd_msg(ASM_sound_handle[asm_index].asm_tid, handle, sound_event, ASM_REQUEST_SETSTATE, sound_state, mm_resource, error_code)) {
+			debug_error("failed to __asm_construct_snd_msg(), error(%d)", *error_code);
+			return false;
+		}
 		debug_msg( "[func(%p) START]", func);
 		func (&asm_snd_msg, &asm_rcv_msg);
 		debug_msg( "[func END]");
 	} else {
-		NO_EINTR(ret = msgsnd(asm_snd_msgid, (void *)&asm_snd_msg, sizeof(asm_snd_msg.data), 0));
-		if (ret == -1) {
-			*error_code = ERR_ASM_MSG_QUEUE_SND_ERROR;
-			debug_error("failed to msgsnd(%d,%s)", errno, strerror(errno));
+		conn = g_bus_get_sync(G_BUS_TYPE_SYSTEM, NULL, &err);
+		if (!conn && err) {
+			debug_error ("g_bus_get_sync() error (%s) ", err->message);
+			g_error_free (err);
 			return false;
+		}
+
+		client_variant = g_variant_new("(iiiiii)", ASM_sound_handle[asm_index].asm_tid, handle, sound_event,
+										ASM_REQUEST_SETSTATE, sound_state, mm_resource);
+		res_variant = g_dbus_connection_call_sync(conn, ASM_BUS_NAME_SOUND_SERVER, ASM_OBJECT_SOUND_SERVER, ASM_INTERFACE_SOUND_SERVER,
+										"ASMSetState", client_variant, NULL, G_DBUS_CALL_FLAGS_NONE, -1, NULL, &err);
+
+		if(!res_variant && err) {
+			debug_error("g_dbus_connection_call_sync fail(%s)", err->message);
+			*error_code = ERR_ASM_GDBUS_CONNECTION_ERROR;
+			g_error_free (err);
+			return false;
+		} else {
+			g_variant_get(res_variant ,"(iiiiiii)", &(asm_rcv_msg.instance_id), &(asm_rcv_msg.data.alloc_handle),
+												&(asm_rcv_msg.data.cmd_handle), &(asm_rcv_msg.data.source_request_id),
+												&(asm_rcv_msg.data.result_sound_command), &(asm_rcv_msg.data.result_sound_state),
+												&(asm_rcv_msg.data.error_code));
 		}
 	}
 
 	if (sound_state == ASM_STATE_PLAYING ) {
 		debug_log( "sound_state is PLAYING, func(0x%x)", func);
-		if (func == NULL) {
-			NO_EINTR(ret = msgrcv(asm_rcv_msgid, (void *)&asm_rcv_msg, sizeof(asm_rcv_msg.data), ASM_sound_handle[asm_index].asm_tid, 0));
-			if (ret == -1) {
-				*error_code = ERR_ASM_MSG_QUEUE_RCV_ERROR;
-				debug_error("failed to msgrcv(%d,%s)", errno, strerror(errno));
-				return false;
-			}
-
-			if (asm_rcv_msg.data.source_request_id != ASM_REQUEST_SETSTATE) {
-				*error_code = ERR_ASM_MSG_QUEUE_RCV_ERROR;
-				debug_error("received msg is not valid, source_request_id(%d)", asm_rcv_msg.data.source_request_id);
-				return false;
-			}
-		}
-
 
 		switch (asm_rcv_msg.data.result_sound_command) {
 		case ASM_COMMAND_PAUSE:
@@ -1629,7 +1694,8 @@ bool ASM_set_sound_state_ex (const int asm_handle, ASM_sound_events_t sound_even
 
 				if (ASM_sound_handle[asm_index].asm_callback!=NULL) {
 					debug_msg( "[ASM_CB(%p) START]", ASM_sound_handle[asm_index].asm_callback);
-					ASM_sound_handle[asm_index].asm_callback(asm_rcv_msg.data.cmd_handle, ASM_sound_handle[asm_index].sound_event, asm_rcv_msg.data.result_sound_command, rcv_sound_status_value, ASM_sound_handle[asm_index].user_data);
+					ASM_sound_handle[asm_index].asm_callback(asm_rcv_msg.data.cmd_handle, ASM_sound_handle[asm_index].sound_event,
+							asm_rcv_msg.data.result_sound_command, rcv_sound_status_value, ASM_sound_handle[asm_index].user_data);
 					debug_msg( "[ASM_CB END]");
 				} else {
 					debug_msg("asm callback is null");
@@ -1663,7 +1729,10 @@ bool ASM_set_subsession (const int asm_handle, ASM_sound_sub_sessions_t subsessi
 {
 	int handle = 0;
 	int asm_index = 0;
-	int ret = 0;
+	GError *err = NULL;
+	GDBusConnection *conn = NULL;
+	GVariant *res_variant = NULL;
+	GVariant *client_variant = NULL;
 
 	debug_fenter();
 
@@ -1692,31 +1761,28 @@ bool ASM_set_subsession (const int asm_handle, ASM_sound_sub_sessions_t subsessi
 		return false;
 	}
 
-	if (!__asm_construct_snd_msg(ASM_sound_handle[asm_index].asm_tid, ASM_sound_handle[asm_index].handle, subsession, ASM_REQUEST_SET_SUBSESSION, ASM_sound_handle[asm_index].sound_state, resource, error_code)) {
-		debug_error("failed to __asm_construct_snd_msg(), error(%d)", *error_code);
+	conn = g_bus_get_sync(G_BUS_TYPE_SYSTEM, NULL, &err);
+	if (!conn && err) {
+		debug_error ("g_bus_get_sync() error (%s) ", err->message);
+		g_error_free (err);
 		return false;
 	}
 
+	client_variant = g_variant_new("(iiiiii)", ASM_sound_handle[asm_index].asm_tid, ASM_sound_handle[asm_index].handle, subsession,
+								ASM_REQUEST_SET_SUBSESSION,  ASM_sound_handle[asm_index].sound_state, resource);
+	res_variant = g_dbus_connection_call_sync(conn, ASM_BUS_NAME_SOUND_SERVER, ASM_OBJECT_SOUND_SERVER, ASM_INTERFACE_SOUND_SERVER,
+								"ASMSetSubsession", client_variant, NULL, G_DBUS_CALL_FLAGS_NONE, -1, NULL, &err);
 
-	NO_EINTR(ret = msgsnd(asm_snd_msgid, (void *)&asm_snd_msg, sizeof(asm_snd_msg.data), 0));
-	if (ret == -1) {
-		*error_code = ERR_ASM_MSG_QUEUE_SND_ERROR;
-		debug_error("failed to msgsnd(%d,%s)", errno, strerror(errno));
+	if(!res_variant && err) {
+		debug_error("g_dbus_connection_call_sync fail(%s)", err->message);
+		*error_code = ERR_ASM_GDBUS_CONNECTION_ERROR;
+		g_error_free (err);
 		return false;
+	} else {
+		g_variant_get(res_variant ,"(iiii)", &(asm_rcv_msg.instance_id), &(asm_rcv_msg.data.alloc_handle), &(asm_rcv_msg.data.cmd_handle), &(asm_rcv_msg.data.source_request_id));
 	}
 
-	NO_EINTR(ret = msgrcv(asm_rcv_msgid, (void *)&asm_rcv_msg, sizeof(asm_rcv_msg.data), ASM_sound_handle[asm_index].asm_tid, 0));
-	if (ret == -1) {
-		*error_code = ERR_ASM_MSG_QUEUE_RCV_ERROR;
-		debug_error("failed to msgrcv(%d,%s)", errno, strerror(errno));
-		return false;
-	}
 
-	if (asm_rcv_msg.data.source_request_id != ASM_REQUEST_SET_SUBSESSION) {
-		*error_code = ERR_ASM_MSG_QUEUE_RCV_ERROR;
-		debug_error("received msg is not valid, source_request_id(%d)", asm_rcv_msg.data.source_request_id);
-		return false;
-	}
 
 	/* TODO: Should check msg returned.....*/
 #if 0
@@ -1748,7 +1814,10 @@ bool ASM_get_subsession (const int asm_handle, ASM_sound_sub_sessions_t *subsess
 {
 	int handle = 0;
 	int asm_index = 0;
-	int ret = 0;
+	GError *err = NULL;
+	GDBusConnection *conn = NULL;
+	GVariant *res_variant = NULL;
+	GVariant *client_variant = NULL;
 
 	debug_fenter();
 
@@ -1777,30 +1846,25 @@ bool ASM_get_subsession (const int asm_handle, ASM_sound_sub_sessions_t *subsess
 		return false;
 	}
 
-	if (!__asm_construct_snd_msg(ASM_sound_handle[asm_index].asm_tid, ASM_sound_handle[asm_index].handle, 0, ASM_REQUEST_GET_SUBSESSION, 0, 0, error_code)) {
-		debug_error("failed to __asm_construct_snd_msg(), error(%d)", *error_code);
+	conn = g_bus_get_sync(G_BUS_TYPE_SYSTEM, NULL, &err);
+	if (!conn && err) {
+		debug_error ("g_bus_get_sync() error (%s) ", err->message);
+		g_error_free (err);
 		return false;
 	}
 
+	client_variant = g_variant_new("(iiiiii)", ASM_sound_handle[asm_index].asm_tid, ASM_sound_handle[asm_index].handle, 0,
+								ASM_REQUEST_GET_SUBSESSION, 0, 0);
+	res_variant = g_dbus_connection_call_sync(conn, ASM_BUS_NAME_SOUND_SERVER, ASM_OBJECT_SOUND_SERVER, ASM_INTERFACE_SOUND_SERVER,
+							"ASMGetSubsession", client_variant, NULL, G_DBUS_CALL_FLAGS_NONE, -1, NULL, &err);
 
-	NO_EINTR(ret = msgsnd(asm_snd_msgid, (void *)&asm_snd_msg, sizeof(asm_snd_msg.data), 0));
-	if (ret == -1) {
-		*error_code = ERR_ASM_MSG_QUEUE_SND_ERROR;
-		debug_error("failed to msgsnd(%d,%s)", errno, strerror(errno));
+	if(!res_variant && err) {
+		debug_error("g_dbus_connection_call_sync fail(%s)", err->message);
+		*error_code = ERR_ASM_GDBUS_CONNECTION_ERROR;
+		g_error_free (err);
 		return false;
-	}
-
-	NO_EINTR(ret = msgrcv(asm_rcv_msgid, (void *)&asm_rcv_msg, sizeof(asm_rcv_msg.data), ASM_sound_handle[asm_index].asm_tid, 0));
-	if (ret == -1) {
-		*error_code = ERR_ASM_MSG_QUEUE_RCV_ERROR;
-		debug_error("failed to msgrcv(%d,%s)", errno, strerror(errno));
-		return false;
-	}
-
-	if (asm_rcv_msg.data.source_request_id != ASM_REQUEST_GET_SUBSESSION) {
-		*error_code = ERR_ASM_MSG_QUEUE_RCV_ERROR;
-		debug_error("received msg is not valid, source_request_id(%d)", asm_rcv_msg.data.source_request_id);
-		return false;
+	} else {
+		g_variant_get(res_variant ,"(iiiii)", &(asm_rcv_msg.instance_id), &(asm_rcv_msg.data.alloc_handle), &(asm_rcv_msg.data.cmd_handle), &(asm_rcv_msg.data.source_request_id), &(asm_rcv_msg.data.result_sound_command));
 	}
 
 	*subsession = asm_rcv_msg.data.result_sound_command;
@@ -1816,8 +1880,11 @@ bool ASM_set_subevent (const int asm_handle, ASM_sound_sub_events_t subevent, in
 {
 	int handle = 0;
 	int asm_index = 0;
-	int ret = 0;
 	ASM_sound_states_t sound_state = ASM_STATE_NONE;
+	GError *err = NULL;
+	GDBusConnection *conn = NULL;
+	GVariant *res_variant = NULL;
+	GVariant *client_variant = NULL;
 
 	debug_fenter();
 
@@ -1848,44 +1915,31 @@ bool ASM_set_subevent (const int asm_handle, ASM_sound_sub_events_t subevent, in
 
 	if (subevent == ASM_SUB_EVENT_NONE) {
 		sound_state = ASM_STATE_STOP;
-		if (!__asm_construct_snd_msg(ASM_sound_handle[asm_index].asm_tid, ASM_sound_handle[asm_index].handle, subevent, ASM_REQUEST_SET_SUBEVENT, sound_state, 0, error_code)) {
-			debug_error("failed to __asm_construct_snd_msg() for ASM_SUB_EVENT_NONE, error(%d)", *error_code);
-			return false;
-		}
 	} else if (subevent < ASM_SUB_EVENT_MAX) {
 		sound_state = ASM_STATE_PLAYING;
-		if (!__asm_construct_snd_msg(ASM_sound_handle[asm_index].asm_tid, ASM_sound_handle[asm_index].handle, subevent, ASM_REQUEST_SET_SUBEVENT, sound_state, 0, error_code)) {
-			debug_error("failed to __asm_construct_snd_msg() for ASM_SUB_EVENT(%d), error(%d)", subevent, *error_code);
-			return false;
-		}
 	}
 
 
-	NO_EINTR(ret = msgsnd(asm_snd_msgid, (void *)&asm_snd_msg, sizeof(asm_snd_msg.data), 0));
-	if (ret == -1) {
-		*error_code = ERR_ASM_MSG_QUEUE_SND_ERROR;
-		debug_error("failed to msgsnd(%d,%s)", errno, strerror(errno));
+	conn = g_bus_get_sync(G_BUS_TYPE_SYSTEM, NULL, &err);
+	if (!conn && err) {
+		debug_error ("g_bus_get_sync() error (%s) ", err->message);
+		g_error_free (err);
 		return false;
 	}
 
-	if (subevent == ASM_SUB_EVENT_NONE) {
-		ASM_sound_handle[asm_index].sound_state = sound_state;
-		debug_msg("Sent SUB_EVENT_NONE, do not wait a returned message");
-		debug_fleave();
-		return true;
-	}
+	client_variant = g_variant_new("(iiiiii)", ASM_sound_handle[asm_index].asm_tid, ASM_sound_handle[asm_index].handle, subevent,
+								ASM_REQUEST_SET_SUBEVENT, sound_state, 0);
+	res_variant = g_dbus_connection_call_sync(conn, ASM_BUS_NAME_SOUND_SERVER, ASM_OBJECT_SOUND_SERVER, ASM_INTERFACE_SOUND_SERVER,
+								"ASMSetSubevent", client_variant, NULL, G_DBUS_CALL_FLAGS_NONE, -1, NULL, &err);
 
-	NO_EINTR(ret = msgrcv(asm_rcv_msgid, (void *)&asm_rcv_msg, sizeof(asm_rcv_msg.data), ASM_sound_handle[asm_index].asm_tid, 0));
-	if (ret == -1) {
-		*error_code = ERR_ASM_MSG_QUEUE_RCV_ERROR;
-		debug_error("failed to msgrcv(%d,%s)", errno, strerror(errno));
+	if (!res_variant && err) {
+		debug_error("g_dbus_connection_call_sync fail(%s)", err->message);
+		*error_code = ERR_ASM_GDBUS_CONNECTION_ERROR;
+		g_error_free (err);
 		return false;
-	}
-
-	if (asm_rcv_msg.data.source_request_id != ASM_REQUEST_SET_SUBEVENT) {
-		*error_code = ERR_ASM_MSG_QUEUE_RCV_ERROR;
-		debug_error("received msg is not valid, source_request_id(%d)", asm_rcv_msg.data.source_request_id);
-		return false;
+	} else {
+		g_variant_get(res_variant, "(iiiiii)", &(asm_rcv_msg.instance_id), &(asm_rcv_msg.data.alloc_handle), &(asm_rcv_msg.data.cmd_handle),
+					&(asm_rcv_msg.data.source_request_id), &(asm_rcv_msg.data.result_sound_command), &(asm_rcv_msg.data.result_sound_state));
 	}
 
 	switch (asm_rcv_msg.data.result_sound_command) {
@@ -1929,7 +1983,8 @@ bool ASM_set_subevent (const int asm_handle, ASM_sound_sub_events_t subevent, in
 
 			if (ASM_sound_handle[asm_index].asm_callback!=NULL) {
 				debug_msg( "[ASM_CB(%p) START]", ASM_sound_handle[asm_index].asm_callback);
-				ASM_sound_handle[asm_index].asm_callback(asm_rcv_msg.data.cmd_handle, ASM_sound_handle[asm_index].sound_event, asm_rcv_msg.data.result_sound_command, rcv_sound_status_value, ASM_sound_handle[asm_index].user_data);
+				ASM_sound_handle[asm_index].asm_callback(asm_rcv_msg.data.cmd_handle, ASM_sound_handle[asm_index].sound_event,
+							asm_rcv_msg.data.result_sound_command, rcv_sound_status_value, ASM_sound_handle[asm_index].user_data);
 				debug_msg( "[ASM_CB END]");
 			} else {
 				debug_msg("asm callback is null");
@@ -1955,7 +2010,10 @@ bool ASM_get_subevent (const int asm_handle, ASM_sound_sub_events_t *subevent, i
 {
 	int handle = 0;
 	int asm_index = 0;
-	int ret = 0;
+	GError *err = NULL;
+	GDBusConnection *conn = NULL;
+	GVariant *res_variant = NULL;
+	GVariant *client_variant = NULL;
 
 	debug_fenter();
 
@@ -1984,30 +2042,26 @@ bool ASM_get_subevent (const int asm_handle, ASM_sound_sub_events_t *subevent, i
 		return false;
 	}
 
-	if (!__asm_construct_snd_msg(ASM_sound_handle[asm_index].asm_tid, ASM_sound_handle[asm_index].handle, 0, ASM_REQUEST_GET_SUBEVENT, 0, 0, error_code)) {
-		debug_error("failed to __asm_construct_snd_msg(), error(%d)", *error_code);
+	conn = g_bus_get_sync(G_BUS_TYPE_SYSTEM, NULL, &err);
+	if (!conn && err) {
+		debug_error ("g_bus_get_sync() error (%s) ", err->message);
+		g_error_free (err);
 		return false;
 	}
 
+	client_variant = g_variant_new("(iiiiii)", ASM_sound_handle[asm_index].asm_tid, ASM_sound_handle[asm_index].handle, 0,
+								ASM_REQUEST_GET_SUBEVENT, 0, 0);
+	res_variant = g_dbus_connection_call_sync(conn, ASM_BUS_NAME_SOUND_SERVER, ASM_OBJECT_SOUND_SERVER, ASM_INTERFACE_SOUND_SERVER,
+								"ASMGetSubevent", client_variant, NULL, G_DBUS_CALL_FLAGS_NONE, -1, NULL,  &err);
 
-	NO_EINTR(ret = msgsnd(asm_snd_msgid, (void *)&asm_snd_msg, sizeof(asm_snd_msg.data), 0));
-	if (ret == -1) {
-		*error_code = ERR_ASM_MSG_QUEUE_SND_ERROR;
-		debug_error("failed to msgsnd(%d,%s)", errno, strerror(errno));
+	if(!res_variant && err) {
+		debug_error("g_dbus_connection_call_sync fail(%s)", err->message);
+		*error_code = ERR_ASM_GDBUS_CONNECTION_ERROR;
+		g_error_free (err);
 		return false;
-	}
-
-	NO_EINTR(ret = msgrcv(asm_rcv_msgid, (void *)&asm_rcv_msg, sizeof(asm_rcv_msg.data), ASM_sound_handle[asm_index].asm_tid, 0));
-	if (ret == -1) {
-		*error_code = ERR_ASM_MSG_QUEUE_RCV_ERROR;
-		debug_error("failed to msgrcv(%d,%s)", errno, strerror(errno));
-		return false;
-	}
-
-	if (asm_rcv_msg.data.source_request_id != ASM_REQUEST_GET_SUBEVENT) {
-		*error_code = ERR_ASM_MSG_QUEUE_RCV_ERROR;
-		debug_error("received msg is not valid, source_request_id(%d)", asm_rcv_msg.data.source_request_id);
-		return false;
+	} else {
+		g_variant_get(res_variant, "(iiiii)", &(asm_rcv_msg.instance_id), &(asm_rcv_msg.data.alloc_handle), &(asm_rcv_msg.data.cmd_handle),
+						&(asm_rcv_msg.data.source_request_id), &(asm_rcv_msg.data.result_sound_command));
 	}
 
 	*subevent = asm_rcv_msg.data.result_sound_command;
@@ -2024,8 +2078,11 @@ bool ASM_set_session_option (const int asm_handle, int option_flags, int *error_
 {
 	int handle = 0;
 	int asm_index = 0;
-	int ret = 0;
 	ASM_sound_states_t sound_state = ASM_STATE_NONE;
+	GError *err = NULL;
+	GDBusConnection *conn = NULL;
+	GVariant *res_variant = NULL;
+	GVariant *client_variant = NULL;
 
 	debug_fenter();
 
@@ -2054,30 +2111,27 @@ bool ASM_set_session_option (const int asm_handle, int option_flags, int *error_
 		return false;
 	}
 
-	if (!__asm_construct_snd_msg(ASM_sound_handle[asm_index].asm_tid, ASM_sound_handle[asm_index].handle, option_flags, ASM_REQUEST_SET_SESSION_OPTIONS, sound_state, 0, error_code)) {
-		debug_error("failed to __asm_construct_snd_msg() for option_flags, error(%d)", *error_code);
+	conn = g_bus_get_sync(G_BUS_TYPE_SYSTEM, NULL, &err);
+	if (!conn && err) {
+		debug_error ("g_bus_get_sync() error (%s) ", err->message);
+		g_error_free (err);
 		return false;
 	}
 
-	NO_EINTR(ret = msgsnd(asm_snd_msgid, (void *)&asm_snd_msg, sizeof(asm_snd_msg.data), 0));
-	if (ret == -1) {
-		*error_code = ERR_ASM_MSG_QUEUE_SND_ERROR;
-		debug_error("failed to msgsnd(%d,%s)", errno, strerror(errno));
+    client_variant = g_variant_new("(iiiiii)",ASM_sound_handle[asm_index].asm_tid, ASM_sound_handle[asm_index].handle, option_flags,
+									ASM_REQUEST_SET_SESSION_OPTIONS, sound_state, 0);
+	res_variant = g_dbus_connection_call_sync(conn, ASM_BUS_NAME_SOUND_SERVER, ASM_OBJECT_SOUND_SERVER, ASM_INTERFACE_SOUND_SERVER,
+								"ASMSetSessionOption", client_variant, NULL, G_DBUS_CALL_FLAGS_NONE, -1, NULL,  &err);
+	if(!res_variant && err) {
+		debug_error("g_dbus_connection_call_sync fail(%s)", err->message);
+		*error_code = ERR_ASM_GDBUS_CONNECTION_ERROR;
+		g_error_free (err);
 		return false;
+	} else {
+		g_variant_get(res_variant ,"(iiiiii)", &(asm_rcv_msg.instance_id), &(asm_rcv_msg.data.alloc_handle), &(asm_rcv_msg.data.cmd_handle),
+						&(asm_rcv_msg.data.source_request_id), &(asm_rcv_msg.data.result_sound_command), &(asm_rcv_msg.data.error_code));
 	}
 
-	NO_EINTR(ret = msgrcv(asm_rcv_msgid, (void *)&asm_rcv_msg, sizeof(asm_rcv_msg.data), ASM_sound_handle[asm_index].asm_tid, 0));
-	if (ret == -1) {
-		*error_code = ERR_ASM_MSG_QUEUE_RCV_ERROR;
-		debug_error("failed to msgrcv(%d,%s)", errno, strerror(errno));
-		return false;
-	}
-
-	if (asm_rcv_msg.data.source_request_id != ASM_REQUEST_SET_SESSION_OPTIONS) {
-		*error_code = ERR_ASM_MSG_QUEUE_RCV_ERROR;
-		debug_error("received msg is not valid, source_request_id(%d)", asm_rcv_msg.data.source_request_id);
-		return false;
-	}
 
 	switch (asm_rcv_msg.data.result_sound_command) {
 	case ASM_COMMAND_PAUSE:
@@ -2125,7 +2179,10 @@ bool ASM_get_session_option (const int asm_handle, int *option_flags, int *error
 {
 	int handle = 0;
 	int asm_index = 0;
-	int ret = 0;
+	GError *err = NULL;
+	GDBusConnection *conn = NULL;
+	GVariant *res_variant = NULL;
+	GVariant *client_variant = NULL;
 
 	debug_fenter();
 
@@ -2154,29 +2211,26 @@ bool ASM_get_session_option (const int asm_handle, int *option_flags, int *error
 		return false;
 	}
 
-	if (!__asm_construct_snd_msg(ASM_sound_handle[asm_index].asm_tid, ASM_sound_handle[asm_index].handle, 0, ASM_REQUEST_GET_SESSION_OPTIONS, 0, 0, error_code)) {
-		debug_error("failed to __asm_construct_snd_msg(), error(%d)", *error_code);
+	conn = g_bus_get_sync(G_BUS_TYPE_SYSTEM, NULL, &err);
+	if (!conn && err) {
+		debug_error ("g_bus_get_sync() error (%s) ", err->message);
+		g_error_free (err);
 		return false;
 	}
 
-	NO_EINTR(ret = msgsnd(asm_snd_msgid, (void *)&asm_snd_msg, sizeof(asm_snd_msg.data), 0));
-	if (ret == -1) {
-		*error_code = ERR_ASM_MSG_QUEUE_SND_ERROR;
-		debug_error("failed to msgsnd(%d,%s)", errno, strerror(errno));
-		return false;
-	}
+	client_variant = g_variant_new("(iiiiii)",ASM_sound_handle[asm_index].asm_tid, ASM_sound_handle[asm_index].handle, 0,
+									ASM_REQUEST_GET_SESSION_OPTIONS, 0, 0);
+	res_variant = g_dbus_connection_call_sync(conn, ASM_BUS_NAME_SOUND_SERVER, ASM_OBJECT_SOUND_SERVER, ASM_INTERFACE_SOUND_SERVER,
+										"ASMGetSessionOption", client_variant, NULL, G_DBUS_CALL_FLAGS_NONE, -1, NULL,  &err);
 
-	NO_EINTR(ret = msgrcv(asm_rcv_msgid, (void *)&asm_rcv_msg, sizeof(asm_rcv_msg.data), ASM_sound_handle[asm_index].asm_tid, 0));
-	if (ret == -1) {
-		*error_code = ERR_ASM_MSG_QUEUE_RCV_ERROR;
-		debug_error("failed to msgrcv(%d,%s)", errno, strerror(errno));
+	if(!res_variant && err) {
+		debug_error("g_dbus_connection_call_sync fail(%s)", err->message);
+		*error_code = ERR_ASM_GDBUS_CONNECTION_ERROR;
+		g_error_free (err);
 		return false;
-	}
-
-	if (asm_rcv_msg.data.source_request_id != ASM_REQUEST_GET_SESSION_OPTIONS) {
-		*error_code = ERR_ASM_MSG_QUEUE_RCV_ERROR;
-		debug_error("received msg is not valid, source_request_id(%d)", asm_rcv_msg.data.source_request_id);
-		return false;
+	} else {
+		g_variant_get(res_variant ,"(iiiiii)", &(asm_rcv_msg.instance_id), &(asm_rcv_msg.data.alloc_handle), &(asm_rcv_msg.data.cmd_handle),
+						&(asm_rcv_msg.data.source_request_id), &(asm_rcv_msg.data.result_sound_command), &(asm_rcv_msg.data.option_flags));
 	}
 
 	if (asm_rcv_msg.data.result_sound_command == ASM_COMMAND_STOP) {
@@ -2203,7 +2257,10 @@ bool ASM_reset_resumption_info(const int asm_handle, int *error_code)
 {
 	int handle = 0;
 	int asm_index = 0;
-	int ret = 0;
+	GError *err = NULL;
+	GDBusConnection *conn = NULL;
+	GVariant *res_variant = NULL;
+	GVariant *client_variant = NULL;
 
 	debug_fenter();
 
@@ -2226,29 +2283,26 @@ bool ASM_reset_resumption_info(const int asm_handle, int *error_code)
 		return false;
 	}
 
-	if (!__asm_construct_snd_msg(ASM_sound_handle[asm_index].asm_tid, ASM_sound_handle[asm_index].handle, 0, ASM_REQUEST_RESET_RESUME_TAG, 0, 0, error_code)) {
-		debug_error("failed to __asm_construct_snd_msg(), error(%d)", *error_code);
+	conn = g_bus_get_sync(G_BUS_TYPE_SYSTEM, NULL, &err);
+	if (!conn && err) {
+		debug_error ("g_bus_get_sync() error (%s) ", err->message);
+		g_error_free (err);
 		return false;
 	}
 
-	NO_EINTR(ret = msgsnd(asm_snd_msgid, (void *)&asm_snd_msg, sizeof(asm_snd_msg.data), 0));
-	if (ret == -1) {
-		*error_code = ERR_ASM_MSG_QUEUE_SND_ERROR;
-		debug_error("failed to msgsnd(%d,%s)", errno, strerror(errno));
-		return false;
-	}
+	client_variant = g_variant_new("(iiiiii)",ASM_sound_handle[asm_index].asm_tid, ASM_sound_handle[asm_index].handle, 0,
+									ASM_REQUEST_RESET_RESUME_TAG, 0, 0);
+	res_variant = g_dbus_connection_call_sync(conn, ASM_BUS_NAME_SOUND_SERVER, ASM_OBJECT_SOUND_SERVER, ASM_INTERFACE_SOUND_SERVER,
+											"ASMResetResumeTag", client_variant, NULL, G_DBUS_CALL_FLAGS_NONE, -1, NULL,  &err);
 
-	NO_EINTR(ret = msgrcv(asm_rcv_msgid, (void *)&asm_rcv_msg, sizeof(asm_rcv_msg.data), ASM_sound_handle[asm_index].asm_tid, 0));
-	if (ret == -1) {
-		*error_code = ERR_ASM_MSG_QUEUE_RCV_ERROR;
-		debug_error("failed to msgrcv(%d,%s)", errno, strerror(errno));
+	if(!res_variant && err) {
+		debug_error("g_dbus_connection_call_sync fail(%s)", err->message);
+		*error_code = ERR_ASM_GDBUS_CONNECTION_ERROR;
+		g_error_free (err);
 		return false;
-	}
-
-	if (asm_rcv_msg.data.source_request_id != ASM_REQUEST_RESET_RESUME_TAG) {
-		*error_code = ERR_ASM_MSG_QUEUE_RCV_ERROR;
-		debug_error("received msg is not valid, source_request_id(%d)", asm_rcv_msg.data.source_request_id);
-		return false;
+	} else {
+		g_variant_get(res_variant ,"(iiiiii)", &(asm_rcv_msg.instance_id), &(asm_rcv_msg.data.alloc_handle), &(asm_rcv_msg.data.cmd_handle),
+					&(asm_rcv_msg.data.source_request_id), &(asm_rcv_msg.data.result_sound_command), &(asm_rcv_msg.data.result_sound_state));
 	}
 
 	switch (asm_rcv_msg.data.result_sound_command) {
@@ -2257,7 +2311,7 @@ bool ASM_reset_resumption_info(const int asm_handle, int *error_code)
 		break;
 	default:
 		debug_error("received message is abnormal..result_sound_command(%d) from ASM server", asm_rcv_msg.data.result_sound_command);
-		*error_code = ERR_ASM_MSG_QUEUE_RCV_ERROR;
+		*error_code = ERR_ASM_GDBUS_CONNECTION_ERROR;
 		return false;
 	}
 
@@ -2269,21 +2323,27 @@ bool ASM_reset_resumption_info(const int asm_handle, int *error_code)
 EXPORT_API
 void ASM_dump_sound_state()
 {
-	int error = 0;
-	int ret = 0;
+	GError *err = NULL;
+	GDBusConnection *conn = NULL;
+	GVariant *client_variant = NULL;
 
-	if (!__ASM_init_msg(&error) ) {
-		debug_error("failed to __ASM_init_msg(), error(%d)", error);
-	}
-	if (!__asm_construct_snd_msg(getpid(), 0, 0, ASM_REQUEST_DUMP, ASM_STATE_NONE, ASM_RESOURCE_NONE, &error)) {
-		debug_error("failed to __asm_construct_snd_msg(), error(%d)", error);
+	conn = g_bus_get_sync(G_BUS_TYPE_SYSTEM, NULL, &err);
+	if (!conn && err) {
+		debug_error ("g_bus_get_sync() error (%s) ", err->message);
+		g_error_free (err);
 		return;
 	}
-	NO_EINTR(ret = msgsnd(asm_snd_msgid, (void *)&asm_snd_msg, sizeof(asm_snd_msg.data), 0));
-	if (ret == -1) {
-		debug_error("failed to msgsnd(%d,%s)", errno, strerror(errno));
+
+	client_variant = g_variant_new("(iiiiii)", getpid(), 0, 0, ASM_REQUEST_DUMP, ASM_STATE_NONE, ASM_RESOURCE_NONE);
+	g_dbus_connection_call_sync(conn, ASM_BUS_NAME_SOUND_SERVER, ASM_OBJECT_SOUND_SERVER, ASM_INTERFACE_SOUND_SERVER,
+								"ASMDump", client_variant, NULL, G_DBUS_CALL_FLAGS_NONE, -1, NULL, &err);
+
+	if(err) {
+		debug_error("g_dbus_connection_call_sync fail(%s)", err->message);
+		g_error_free (err);
 		return;
 	}
+
 }
 
 
@@ -2295,10 +2355,33 @@ struct sigaction ASM_term_old_action;
 struct sigaction ASM_sys_old_action;
 struct sigaction ASM_xcpu_old_action;
 
-static void __ASM_signal_handler(int signo)
+static void __asm_notify_emergent_exit(GDBusConnection *conn, int exit_pid, int handle, int sound_event, int request_id, int sound_state)
+{
+	GVariant *client_variant = NULL;
+	GError *err = NULL;
+
+	debug_log("Send Signal EmergentExit");
+
+	client_variant = g_variant_new("(iiiii)", exit_pid, handle, sound_event, ASM_REQUEST_EMERGENT_EXIT, sound_state);
+	g_dbus_connection_emit_signal(conn, NULL, OBJECT_ASM, INTERFACE_ASM, "EmergentExit", client_variant, &err);
+	if(err) {
+		debug_error("g_dbus_connection_emit_signal fail(%s)", err->message);
+		g_error_free (err);
+	} else {
+		g_dbus_connection_flush_sync(conn, NULL, &err);
+		if(err) {
+			debug_error("g_dbus_connection_flush_sync fail(%s)", err->message);
+			g_error_free (err);
+		}
+	}
+}
+
+void __ASM_signal_handler(int signo)
 {
 	int exit_pid = 0;
 	int asm_index = 0;
+	GError *err = NULL;
+	GDBusConnection *conn = NULL;
 
 	debug_warning("ENTER, sig.num(%d)",signo);
 
@@ -2307,27 +2390,19 @@ static void __ASM_signal_handler(int signo)
 	sigfillset(&all_mask);
 	sigprocmask(SIG_BLOCK, &all_mask, &old_mask);
 
+	conn = g_bus_get_sync(G_BUS_TYPE_SYSTEM, NULL, &err);
+	if (!conn && err) {
+		debug_error ("g_bus_get_sync() error (%s) ", err->message);
+		g_error_free (err);
+		return;
+	}
 	for (asm_index=0 ;asm_index < ASM_HANDLE_MAX; asm_index++) {
 		if (ASM_sound_handle[asm_index].is_used == true &&
 				ASM_sound_handle[asm_index].is_for_watching == false) {
 			exit_pid = ASM_sound_handle[asm_index].asm_tid;
 			if (exit_pid == asmgettid()) {
-				asm_snd_msg.instance_id = exit_pid;
-				asm_snd_msg.data.handle = ASM_sound_handle[asm_index].handle;
-				asm_snd_msg.data.request_id = ASM_REQUEST_EMERGENT_EXIT;
-				asm_snd_msg.data.sound_event = ASM_sound_handle[asm_index].sound_event;
-				asm_snd_msg.data.sound_state = ASM_sound_handle[asm_index].sound_state;
-
-				if (msgsnd(asm_snd_msgid, (void *)&asm_snd_msg, sizeof(asm_snd_msg.data), 0) < 0 ) {
-					debug_msg( "msgsnd() failed, tid=%ld, reqid=%d, handle=0x%x, state=0x%x event=%d size=%d",asm_snd_msg.instance_id,
-							asm_snd_msg.data.request_id, asm_snd_msg.data.handle, asm_snd_msg.data.sound_state, asm_snd_msg.data.sound_event, sizeof(asm_snd_msg.data) );
-					int tmpid = msgget((key_t)2014, 0666);
-					if (msgsnd(tmpid, (void *)&asm_snd_msg, sizeof(asm_snd_msg.data), 0) > 0) {
-						debug_warning("msgsnd() succeed");
-					} else {
-						debug_error("msgsnd() retry also failed");
-					}
-				}
+				__asm_notify_emergent_exit(conn, exit_pid, ASM_sound_handle[asm_index].handle, ASM_sound_handle[asm_index].sound_event,
+							   ASM_REQUEST_EMERGENT_EXIT, ASM_sound_handle[asm_index].sound_state);
 			}
 		}
 	}
@@ -2377,6 +2452,7 @@ static void __attribute__((constructor)) __ASM_init_module(void)
 	int asm_index = 0;
 
 	debug_fenter();
+	g_type_init();
 
 	for (asm_index = 0; asm_index < ASM_HANDLE_MAX; asm_index++) {
 		ASM_sound_handle[asm_index].handle = ASM_HANDLE_INIT_VAL;
@@ -2404,28 +2480,23 @@ static void __attribute__((destructor)) __ASM_fini_module(void)
 
 	int exit_pid = 0;
 	int asm_index = 0;
+	GError *err = NULL;
+	GDBusConnection *conn = NULL;
+	GVariant *client_variant = NULL;
 
-	for (asm_index = 0; asm_index < ASM_HANDLE_MAX; asm_index++) {
+	conn = g_bus_get_sync(G_BUS_TYPE_SYSTEM, NULL, &err);
+	if (!conn && err) {
+		debug_error ("g_bus_get_sync() error (%s) ", err->message);
+		g_error_free (err);
+		return;
+	}
+	for (asm_index=0 ;asm_index < ASM_HANDLE_MAX; asm_index++) {
 		if (ASM_sound_handle[asm_index].is_used == true &&
 				ASM_sound_handle[asm_index].is_for_watching == false) {
 			exit_pid = ASM_sound_handle[asm_index].asm_tid;
 			if (exit_pid == asmgettid()) {
-				asm_snd_msg.instance_id = exit_pid;
-				asm_snd_msg.data.handle = ASM_sound_handle[asm_index].handle;
-				asm_snd_msg.data.request_id = ASM_REQUEST_EMERGENT_EXIT;
-				asm_snd_msg.data.sound_event = ASM_sound_handle[asm_index].sound_event;
-				asm_snd_msg.data.sound_state = ASM_sound_handle[asm_index].sound_state;
-
-				if (msgsnd(asm_snd_msgid, (void *)&asm_snd_msg, sizeof(asm_snd_msg.data), 0) < 0 ) {
-					debug_msg( "msgsnd() failed, tid=%ld, reqid=%d, handle=0x%x, state=0x%x event=%d size=%d",asm_snd_msg.instance_id,
-							asm_snd_msg.data.request_id, asm_snd_msg.data.handle, asm_snd_msg.data.sound_state, asm_snd_msg.data.sound_event, sizeof(asm_snd_msg.data) );
-					int tmpid = msgget((key_t)2014, 0666);
-					if (msgsnd(tmpid, (void *)&asm_snd_msg, sizeof(asm_snd_msg.data), 0) > 0) {
-						debug_warning("msgsnd() succeed");
-					} else {
-						debug_error("msgsnd() retry also failed");
-					}
-				}
+				__asm_notify_emergent_exit(conn, exit_pid, ASM_sound_handle[asm_index].handle, ASM_sound_handle[asm_index].sound_event,
+						       ASM_REQUEST_EMERGENT_EXIT, ASM_sound_handle[asm_index].sound_state);
 			}
 		}
 	}
