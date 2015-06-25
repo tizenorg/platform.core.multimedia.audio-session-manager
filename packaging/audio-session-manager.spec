@@ -1,6 +1,6 @@
 Name:       audio-session-manager
 Summary:    Audio Session Manager
-Version:    0.2.7
+Version:    0.3.0
 Release:    0
 Group:      Multimedia/Service
 License:    Apache-2.0
@@ -12,6 +12,7 @@ Requires(postun): /sbin/ldconfig
 BuildRequires:  pkgconfig(glib-2.0)
 BuildRequires:  pkgconfig(mm-common)
 BuildRequires:  pkgconfig(vconf)
+BuildRequires:  pkgconfig(gio-2.0)
 
 %description
 Audio Session Manager package.
@@ -40,9 +41,12 @@ SDK Release.
 cp %{SOURCE1001} .
 
 %build
-CFLAGS="%{optflags} -fvisibility=hidden -DMM_DEBUG_FLAG -DEXPORT_API=\"__attribute__((visibility(\\\"default\\\")))\"" ; export CFLAGS
-%reconfigure --disable-static
-%__make %{?jobs:-j%jobs}
+
+%autogen --disable-static --noconfigure
+LDFLAGS="$LDFLAGS -Wl,--rpath=%{prefix}/lib -Wl,--hash-style=both -Wl,--as-needed "; export LDFLAGS
+CFLAGS="%{optflags} -fvisibility=hidden -DSUPPORT_CONTAINER -DMM_DEBUG_FLAG -DEXPORT_API=\"__attribute__((visibility(\\\"default\\\")))\"" ; export CFLAGS
+%configure --disable-static --disable-security
+make %{?jobs:-j%jobs}
 
 %install
 %make_install
@@ -51,11 +55,10 @@ CFLAGS="%{optflags} -fvisibility=hidden -DMM_DEBUG_FLAG -DEXPORT_API=\"__attribu
 /sbin/ldconfig
 vconftool set -t int memory/Sound/SoundStatus "0" -g 29 -f -i
 
-%postun -p /sbin/ldconfig
+%postun
+/sbin/ldconfig
 
 %files
-%manifest %{name}.manifest
-%license LICENSE
 %defattr(-,root,root,-)
 %{_libdir}/libaudio-session-mgr.so.*
 %{_bindir}/asm_testsuite
