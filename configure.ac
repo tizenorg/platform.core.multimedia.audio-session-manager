@@ -14,7 +14,7 @@ AC_PROG_MAKE_SET
 AC_PROG_LIBTOOL
 
 # Checks for libraries.
-PKG_CHECK_MODULES(AUDIOSESSIONMGR, glib-2.0 gthread-2.0)
+PKG_CHECK_MODULES(AUDIOSESSIONMGR, glib-2.0 gthread-2.0 gio-2.0)
 AC_SUBST(AUDIOSESSIONMGR_CFLAGS)
 AC_SUBST(AUDIOSESSIONMGR_LIBS)
 
@@ -29,6 +29,28 @@ AC_SUBST(MMLOG_LIBS)
 PKG_CHECK_MODULES(VCONF, vconf)
 AC_SUBST(VCONF_CFLAGS)
 AC_SUBST(VCONF_LIBS)
+
+PKG_CHECK_MODULES(GIO, gio-2.0)
+AC_SUBST(GIO_CFLAGS)
+AC_SUBST(GIO_LIBS)
+
+dnl use security ---------------------------------------------------------------
+AC_ARG_ENABLE(security, AC_HELP_STRING([--enable-security], [using security]),
+[
+case "${enableval}" in
+    yes) USE_SECURITY=yes ;;
+    no)  USE_SECURITY=no ;;
+    *)   AC_MSG_ERROR(bad value ${enableval} for --enable-security) ;;
+esac
+],[USE_SECURITY=no])
+
+if test "x$USE_SECURITY" = "xyes"; then
+    PKG_CHECK_MODULES(SECURITY, security-server)
+    AC_SUBST(SECURITY_CFLAGS)
+    AC_SUBST(SECURITY_LIBS)
+fi
+AM_CONDITIONAL(USE_SECURITY, test "x$USE_SECURITY" = "xyes")
+dnl end ------------------------------------------------------------------------
 
 # Checks for header files.
 AC_HEADER_STDC

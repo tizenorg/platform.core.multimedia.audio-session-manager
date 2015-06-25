@@ -33,9 +33,7 @@
 #define ERR_ASM_ERROR_NONE                     0x00
 #define ERR_ASM_THREAD_CREATE_ERROR            0x01
 #define ERR_ASM_THREAD_CANCEL_ERROR            0x02
-#define ERR_ASM_MSG_QUEUE_MSGID_GET_FAILED     0x03
-#define ERR_ASM_MSG_QUEUE_SND_ERROR            0x04
-#define ERR_ASM_MSG_QUEUE_RCV_ERROR            0x05
+#define ERR_ASM_GDBUS_CONNECTION_ERROR         0x03
 #define ERR_ASM_ALREADY_REGISTERED             0x06
 #define ERR_ASM_ALREADY_UNREGISTERED           0x07
 #define ERR_ASM_EVENT_IS_INVALID               0x08
@@ -72,6 +70,14 @@
 #define ASM_HANDLE_INIT_VAL -1
 
 #define SOUND_STATUS_KEY		"memory/Sound/SoundStatus"
+
+/* GDBUS FEATURES */
+#define ASM_BUS_NAME_SOUND_SERVER "org.tizen.SoundServer"
+#define ASM_OBJECT_SOUND_SERVER "/org/tizen/SoundServer1"
+#define ASM_INTERFACE_SOUND_SERVER "org.tizen.SoundServer1"
+#define OBJECT_ASM "/org/tizen/asm"
+#define INTERFACE_ASM "org.tizen.asm"
+
 /**
   * This enumeration defines sound request.
   */

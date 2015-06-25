@@ -7,6 +7,8 @@ asm_testsuite_CFLAGS = -I$(srcdir)/../include \
 				$(DLOG_CFLAGS) \
 				$(VCONF_CFLAGS)
 
+asm_testsuite_CFLAGS += -fPIC -pie
+
 asm_testsuite_DEPENDENCIES = $(srcdir)/../.libs/libaudio-session-mgr.la
 
 asm_testsuite_LDADD = $(AUDIOSESSIONMGR_LIBS) \

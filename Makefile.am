@@ -12,6 +12,11 @@ libaudio_session_mgr_la_LDFLAGS += -Wl,-fini, __ASM_fini_module
 
 libaudio_session_mgr_la_CPPFLAGS = -I$(srcdir)/include -DUSE_VCONF $(VCONF_CFLAGS) $(MMCOMMON_CFLAGS)
 
+if USE_SECURITY
+libaudio_session_mgr_la_CPPFLAGS += $(SECURITY_CFLAGS) -DUSE_SECURITY
+libaudio_session_mgr_la_LIBADD += $(SECURITY_LIBS)
+endif
+
 libaudio_session_mgr_la_CPPFLAGS += $(MMLOG_CFLAGS) -DMMF_LOG_OWNER=0x00800000 -DMMF_DEBUG_PREFIX=\"MMF-SESSIONMGR\"
 libaudio_session_mgr_la_LIBADD += $(MMLOG_LIBS)
 
