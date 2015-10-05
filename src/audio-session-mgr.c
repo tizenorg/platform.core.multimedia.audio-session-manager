@@ -2380,6 +2380,8 @@ void __ASM_signal_handler(int signo)
 {
 	int exit_pid = 0;
 	int asm_index = 0;
+	char* filename = NULL;
+	char str_error[256];
 	GError *err = NULL;
 	GDBusConnection *conn = NULL;
 
@@ -2389,6 +2391,16 @@ void __ASM_signal_handler(int signo)
 	sigset_t old_mask, all_mask;
 	sigfillset(&all_mask);
 	sigprocmask(SIG_BLOCK, &all_mask, &old_mask);
+
+	filename = g_strdup_printf("/tmp/mm_session_%d", getpid());
+	if (!remove(filename)) {
+		debug_log(" remove %s success\n", filename);
+	} else {
+		strerror_r (errno, str_error, sizeof (str_error));
+		debug_error(" remove %s failed with %s\n", filename, str_error);
+	}
+
+	g_free(filename);
 
 	conn = g_bus_get_sync(G_BUS_TYPE_SYSTEM, NULL, &err);
 	if (!conn && err) {
