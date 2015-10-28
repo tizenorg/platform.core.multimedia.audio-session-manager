@@ -1,13 +1,12 @@
 Name:       audio-session-manager
 Summary:    Audio Session Manager
-Version:    0.3.0
+Version:    0.3.1
 Release:    0
 Group:      Multimedia/Service
 License:    Apache-2.0
 Source0:    %{name}-%{version}.tar.gz
 Source1001: audio-session-manager.manifest
 Requires(post): /sbin/ldconfig
-Requires(post): /usr/bin/vconftool
 Requires(postun): /sbin/ldconfig
 BuildRequires:  pkgconfig(glib-2.0)
 BuildRequires:  pkgconfig(mm-common)
@@ -53,7 +52,6 @@ make %{?jobs:-j%jobs}
 
 %post
 /sbin/ldconfig
-vconftool set -t int memory/Sound/SoundStatus "0" -g 29 -f -i
 
 %postun
 /sbin/ldconfig
