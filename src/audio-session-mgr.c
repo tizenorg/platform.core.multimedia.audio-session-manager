@@ -66,10 +66,6 @@
 
 #define NO_EINTR(stmt) while ((stmt) == -1 && errno == EINTR);  /* sample code by THE LINUX PROGRAMMING INTERFACE */
 
-static int asm_snd_msgid;
-static int asm_rcv_msgid;
-static int asm_cb_msgid;
-
 static ASM_msg_lib_to_asm_t asm_snd_msg;
 static ASM_msg_asm_to_lib_t asm_rcv_msg;
 
@@ -2452,7 +2448,6 @@ static void __attribute__((constructor)) __ASM_init_module(void)
 	int asm_index = 0;
 
 	debug_fenter();
-	g_type_init();
 
 	for (asm_index = 0; asm_index < ASM_HANDLE_MAX; asm_index++) {
 		ASM_sound_handle[asm_index].handle = ASM_HANDLE_INIT_VAL;
@@ -2482,7 +2477,6 @@ static void __attribute__((destructor)) __ASM_fini_module(void)
 	int asm_index = 0;
 	GError *err = NULL;
 	GDBusConnection *conn = NULL;
-	GVariant *client_variant = NULL;
 
 	conn = g_bus_get_sync(G_BUS_TYPE_SYSTEM, NULL, &err);
 	if (!conn && err) {
